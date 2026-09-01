@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
-import { BEAT_GAP_SECONDS, type Story } from '@reel-agent/shared';
+import { BEAT_GAP_SECONDS, END_TAIL_SECONDS, type Story } from '@reel-agent/shared';
 import type { WordTiming } from '../../clients/tts.js';
 import type { CaptionCue } from '../../clients/captions.js';
 import {
@@ -21,6 +21,12 @@ import {
   nextTakeNumber,
 } from '../../database/queries/assets.js';
 import { publishEvent } from '../events.js';
+
+/** Beat hold = narration + inter-beat gap; the last beat gets a longer tail
+ * so the reel lands instead of hard-stopping after the final word. */
+export function beatTargetSeconds(audioDuration: number, isLast: boolean): number {
+  return audioDuration + BEAT_GAP_SECONDS + (isLast ? END_TAIL_SECONDS : 0);
+}
 
 /**
  * The sync-critical step. Audio drives timing (pipeline-decisions §5):
@@ -70,7 +76,7 @@ export async function runMergeStep(app: FastifyInstance, videoId: number, story:
     const wavPath = toAbsolute(app.config.storageDir, beatAudio.file_path);
     // measure the REAL audio, never trust stored numbers for the final cut
     const audioDuration = await probeDuration(wavPath);
-    const target = audioDuration + BEAT_GAP_SECONDS;
+    const target = beatTargetSeconds(audioDuration, beat.index === story.beats.length - 1);
 
     const normClip = path.join(workDir, `${beatPrefix(beat.index)}_norm.mp4`);
     const padWav = path.join(workDir, `${beatPrefix(beat.index)}_pad.wav`);

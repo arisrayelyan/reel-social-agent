@@ -5,8 +5,6 @@ import { api } from '@/lib/api';
 
 export interface GenerateStoryResponse {
   video: Video;
-  warnings: string[];
-  totals: { words: number; seconds: number };
 }
 
 function errorMessage(err: unknown): string {
@@ -27,7 +25,6 @@ export function useVideoMutations() {
       api.post<GenerateStoryResponse>('/api/generate/story', body).then((r) => r.data),
     onSuccess: (data) => {
       invalidate(data.video.id);
-      data.warnings.forEach((w) => toast.warning(w));
     },
     onError: (err) => toast.error(errorMessage(err)),
   });

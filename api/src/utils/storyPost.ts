@@ -6,6 +6,7 @@ import {
   TARGET_DURATION_SECONDS,
   TARGET_WORD_COUNT,
   WORDS_PER_MINUTE,
+  type LlmStory,
   type Story,
 } from '@reel-agent/shared';
 
@@ -30,7 +31,7 @@ export function durationForWords(wordCount: number): number {
   return Number(((wordCount / WORDS_PER_MINUTE) * 60).toFixed(2));
 }
 
-export function postProcessStory(raw: Story): StoryValidation {
+export function postProcessStory(raw: LlmStory): StoryValidation {
   const warnings: string[] = [];
 
   const beats = raw.beats.map((beat, i) => {

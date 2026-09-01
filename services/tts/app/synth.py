@@ -21,6 +21,34 @@ import torchaudio as ta  # noqa: E402
 
 from .config import Settings  # noqa: E402
 
+import re  # noqa: E402
+
+_TAG_RE = re.compile(r"\[[^\]]{1,40}\]")
+# punctuation that Chatterbox's punc_norm accepts as a sentence ender but that
+# produces rising, unfinished intonation — the "speaker wants to continue" bug
+_NON_TERMINAL = ",-;:—–"
+
+
+def prepare_text(text: str, model_name: str) -> str:
+    """Model-aware transcript prep on top of speak.clean_transcript.
+
+    - Paralinguistic tags ([laugh], [sigh], …) are a turbo/nano-only feature;
+      the standard/multilingual models would read them aloud, so strip them.
+    - Guarantee terminal punctuation (., !, ?): punc_norm treats a trailing
+      comma or dash as a sentence ender, which makes the delivery trail
+      upward as if the narration were cut off mid-thought.
+    """
+    cleaned = speak.clean_transcript(text, strip_speakers=False, strip_cues=True, keep_tags=False)
+    if model_name not in ("turbo", "nano"):
+        lines = [" ".join(_TAG_RE.sub(" ", line).split()) for line in cleaned.splitlines()]
+        cleaned = "\n".join(lines).strip()
+    stripped = cleaned.rstrip()
+    while stripped and stripped[-1] in _NON_TERMINAL:
+        stripped = stripped[:-1].rstrip()
+    if stripped and stripped[-1] not in ".!?":
+        stripped += "."
+    return stripped
+
 
 class Synthesizer:
     def __init__(self, settings: Settings) -> None:
@@ -56,7 +84,7 @@ class Synthesizer:
 
     def synthesize(self, text: str, out_path: str, seed: int | None = None) -> tuple[float, torch.Tensor, int]:
         """Renders `text` to `out_path` (wav). Returns (duration_s, audio, sr)."""
-        cleaned = speak.clean_transcript(text, strip_speakers=False, strip_cues=True, keep_tags=False)
+        cleaned = prepare_text(text, self.settings.model)
         if not cleaned:
             raise ValueError("No text to speak after cleanup")
         chunks = speak.chunk_transcript(cleaned, speak.DEFAULT_MAX_CHARS)

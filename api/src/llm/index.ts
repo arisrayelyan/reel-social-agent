@@ -10,12 +10,13 @@ export function getProvider(config: AppConfig, name: Provider): LlmProvider {
     case 'ollama':
       return new OllamaProvider(config.ollamaUrl, config.ollamaModel);
     case 'claude-code':
-      return new ClaudeCodeProvider(config.claudeCliPath);
+      return new ClaudeCodeProvider(config.claudeCliPath, config.claudeModel);
     case 'codex':
       return new CodexProvider(
         config.codexCliPath,
         config.codexInputCostPerMTok,
         config.codexOutputCostPerMTok,
+        config.codexModel,
       );
   }
 }

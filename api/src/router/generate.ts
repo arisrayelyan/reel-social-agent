@@ -5,8 +5,9 @@ import {
   LlmStorySchema,
   SuggestTopicsBodySchema,
   TopicIdeasSchema,
+  type Provider,
 } from '@reel-agent/shared';
-import { generateJsonWithRetry, getProvider } from '../llm/index.js';
+import { generateJsonWithRetry, getProvider, type LlmProvider } from '../llm/index.js';
 import { embedText } from '../llm/ollama.js';
 import {
   buildChangeRequestPrompt,
@@ -17,26 +18,105 @@ import {
 } from '../llm/prompts.js';
 import { postProcessStory } from '../utils/storyPost.js';
 import {
-  createVideo,
+  addVideoCost,
+  createDraftVideo,
   findAllVideos,
   findMostSimilarTopic,
   findVideoById,
+  updateVideoStatus,
   updateVideoStory,
 } from '../database/queries/videos.js';
 import { insertGenerationRun } from '../database/queries/generationRuns.js';
-import { addVideoCost } from '../database/queries/videos.js';
+import { publishEvent } from '../pipeline/events.js';
 
 /** Hard reject when an explicit topic nearly duplicates an existing video. */
 const SIMILARITY_THRESHOLD = 0.9;
 /** Stricter filter for machine-suggested ideas — each generation must differ. */
 const SUGGESTION_SIMILARITY_THRESHOLD = 0.82;
 
+/**
+ * Runs script generation in the background so the HTTP request returns
+ * instantly — the frontend redirects to the video page, which shows the
+ * draft/"writing" state live (SSE + polling). Reasoning models can take
+ * 5-15 minutes, far beyond a sane request timeout.
+ */
+function runStoryGeneration(
+  app: FastifyInstance,
+  opts: {
+    videoId: number;
+    providerName: Provider;
+    provider: LlmProvider;
+    prompt: string;
+    changeRequest: string | null;
+    runPrompt: string;
+  },
+): void {
+  void (async () => {
+    const startedAt = Date.now();
+    await publishEvent(app, {
+      video_id: opts.videoId,
+      step: 'script',
+      status: 'started',
+      message: `Writing script with ${opts.providerName}`,
+    });
+    try {
+      const result = await generateJsonWithRetry(opts.provider, {
+        system: storySystem(app.config.promptsDir),
+        prompt: opts.prompt,
+        schema: LlmStorySchema,
+      });
+      const processed = postProcessStory(result.data);
+      await insertGenerationRun(app, {
+        videoId: opts.videoId,
+        step: 'script',
+        provider: opts.providerName,
+        model: result.model,
+        prompt: opts.runPrompt,
+        output: processed.warnings.length ? { warnings: processed.warnings } : null,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        costUsd: result.costUsd,
+        durationMs: Date.now() - startedAt,
+      });
+      await addVideoCost(app, opts.videoId, result.costUsd);
+      await updateVideoStory(app, opts.videoId, processed.story, opts.changeRequest);
+      await publishEvent(app, {
+        video_id: opts.videoId,
+        step: 'script',
+        status: 'completed',
+        message: processed.warnings.join('; ') || undefined,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      app.log.error({ err, videoId: opts.videoId }, 'script generation failed');
+      await insertGenerationRun(app, {
+        videoId: opts.videoId,
+        step: 'script',
+        provider: opts.providerName,
+        model: 'unknown',
+        prompt: opts.runPrompt,
+        output: { error: message.slice(0, 2000) },
+        costUsd: 0,
+        durationMs: Date.now() - startedAt,
+        status: 'failed',
+      }).catch(() => undefined);
+      await updateVideoStatus(app, opts.videoId, 'failed', 'script', message.slice(0, 2000));
+      await publishEvent(app, {
+        video_id: opts.videoId,
+        step: 'script',
+        status: 'failed',
+        message: message.slice(0, 300),
+      });
+    }
+  })();
+}
+
 export async function generateRouter(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   /**
-   * Generates (or regenerates with a change request) a story. Synchronous:
-   * LLM latency is acceptable for an interactive review flow.
+   * Kicks off (or re-kicks with a change request) story generation and
+   * returns the video row immediately — generation completes in background.
    */
   r.post(
     '/generate/story',
@@ -50,33 +130,21 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
         const video = await findVideoById(app, video_id);
         if (!video?.story) return reply.code(404).send({ error: 'Video not found' });
         if (!change_request) return reply.code(400).send({ error: 'change_request is required' });
-
-        const startedAt = Date.now();
-        const result = await generateJsonWithRetry(provider, {
-          system: storySystem(app.config.promptsDir),
+        await updateVideoStatus(app, video.id, 'draft', 'script');
+        runStoryGeneration(app, {
+          videoId: video.id,
+          providerName,
+          provider,
           prompt: buildChangeRequestPrompt(
             app.config.promptsDir,
             video.topic,
             JSON.stringify(video.story),
             change_request,
           ),
-          schema: LlmStorySchema,
+          changeRequest: change_request,
+          runPrompt: change_request,
         });
-        const processed = postProcessStory(result.data);
-        await insertGenerationRun(app, {
-          videoId: video.id,
-          step: 'script',
-          provider: providerName,
-          model: result.model,
-          prompt: change_request,
-          inputTokens: result.inputTokens,
-          outputTokens: result.outputTokens,
-          costUsd: result.costUsd,
-          durationMs: Date.now() - startedAt,
-        });
-        await addVideoCost(app, video.id, result.costUsd);
-        const updated = await updateVideoStory(app, video.id, processed.story, change_request);
-        return { video: updated, warnings: processed.warnings, totals: { words: processed.totalWords, seconds: processed.totalSeconds } };
+        return { video: { ...video, status: 'draft', current_step: 'script' } };
       }
 
       // — new story —
@@ -96,36 +164,16 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
         app.log.warn({ err }, 'topic embedding unavailable — skipping dedupe');
       }
 
-      const startedAt = Date.now();
-      const result = await generateJsonWithRetry(provider, {
-        system: storySystem(app.config.promptsDir),
-        prompt: buildStoryPrompt(app.config.promptsDir, topic),
-        schema: LlmStorySchema,
-      });
-      const processed = postProcessStory(result.data);
-      const video = await createVideo(app, {
-        topic: processed.story.topic,
-        hook: processed.story.hook,
-        story: processed.story,
-        embedding,
-      });
-      await insertGenerationRun(app, {
+      const video = await createDraftVideo(app, { topic, embedding });
+      runStoryGeneration(app, {
         videoId: video.id,
-        step: 'script',
-        provider: providerName,
-        model: result.model,
-        prompt: topic,
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
-        costUsd: result.costUsd,
-        durationMs: Date.now() - startedAt,
+        providerName,
+        provider,
+        prompt: buildStoryPrompt(app.config.promptsDir, topic),
+        changeRequest: null,
+        runPrompt: topic,
       });
-      await addVideoCost(app, video.id, result.costUsd);
-      return {
-        video: { ...video, total_cost_usd: Number(video.total_cost_usd) + result.costUsd },
-        warnings: processed.warnings,
-        totals: { words: processed.totalWords, seconds: processed.totalSeconds },
-      };
+      return reply.code(202).send({ video });
     },
   );
 

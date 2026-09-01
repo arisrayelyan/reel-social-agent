@@ -14,14 +14,24 @@ export class CodexProvider implements LlmProvider {
     private readonly cliPath: string,
     private readonly inputCostPerMTok: number,
     private readonly outputCostPerMTok: number,
+    private readonly model: string = '',
   ) {}
 
   async generateJson<T>(opts: GenerateJsonOptions<T>): Promise<LlmResult<T>> {
     const prompt = `${opts.system}\n\n${opts.prompt}`;
     const { stdout } = await execa(
       this.cliPath,
-      ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'read-only', prompt],
-      { timeout: 300_000 },
+      [
+        'exec',
+        '--json',
+        '--skip-git-repo-check',
+        '--sandbox', 'read-only',
+        ...(this.model ? ['--model', this.model] : []),
+        prompt,
+      ],
+      // stdin MUST be closed: codex exec waits for stdin EOF on a piped stdin
+      // and hangs forever before ever contacting the API
+      { timeout: 900_000, stdin: 'ignore' },
     );
 
     const { text, inputTokens, outputTokens, model } = parseCodexJsonl(stdout);
@@ -35,7 +45,7 @@ export class CodexProvider implements LlmProvider {
       outputTokens,
       costUsd: Number(costUsd.toFixed(4)),
       raw: text,
-      model: model ?? 'codex',
+      model: model ?? (this.model || 'codex'),
     };
   }
 }

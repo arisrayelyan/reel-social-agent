@@ -8,6 +8,12 @@ export const TARGET_WORD_COUNT = { min: 150, max: 190 } as const;
 /** Silence appended after each beat before the next one starts (also video pad). */
 export const BEAT_GAP_SECONDS = 0.45;
 
+/**
+ * Extra hold after the final beat's narration ends — without it the reel
+ * hard-stops 0.45s after the last word and feels cut off mid-thought.
+ */
+export const END_TAIL_SECONDS = 1.2;
+
 /** Render target. */
 export const VIDEO = { width: 1080, height: 1920, fps: 30 } as const;
 

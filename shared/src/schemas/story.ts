@@ -29,8 +29,20 @@ export const StorySchema = z.object({
   beats: z.array(BeatSchema).min(6).max(14),
 });
 
-/** What we ask the LLM for (durations/word counts recomputed server-side anyway). */
-export const LlmStorySchema = StorySchema;
+/**
+ * What we ask the LLM for: index/word_count/duration_seconds are optional
+ * because the server recomputes all three in postProcessStory (145 wpm rule)
+ * — demanding derived numbers from the model only causes validation retries.
+ */
+export const LlmBeatSchema = BeatSchema.partial({
+  index: true,
+  word_count: true,
+  duration_seconds: true,
+});
+export const LlmStorySchema = StorySchema.extend({
+  beats: z.array(LlmBeatSchema).min(6).max(14),
+});
+export type LlmStory = z.infer<typeof LlmStorySchema>;
 
 export const TopicIdeaSchema = z.object({
   topic: z.string().min(3),

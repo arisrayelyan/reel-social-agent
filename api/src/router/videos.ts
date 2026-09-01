@@ -85,6 +85,12 @@ export async function videosRouter(app: FastifyInstance): Promise<void> {
       if (video.status !== 'failed' || !video.current_step) {
         return reply.code(409).send({ error: 'Only failed videos can be retried' });
       }
+      if (video.current_step === 'script') {
+        return reply.code(409).send({
+          error:
+            'Script generation is not a queue step — request changes to regenerate, or delete the video and generate again',
+        });
+      }
       await enqueueStep(app, video.id, video.current_step);
       return { ok: true };
     },

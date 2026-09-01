@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { Video } from '@reel-agent/shared';
 import { api } from '@/lib/api';
 
-const LIVE_STATUSES = new Set(['rendering', 'publishing', 'approved']);
+const LIVE_STATUSES = new Set(['draft', 'rendering', 'publishing', 'approved']);
 
 export function useVideos() {
   return useQuery<Video[]>({

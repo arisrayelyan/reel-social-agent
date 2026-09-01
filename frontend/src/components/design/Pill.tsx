@@ -58,10 +58,10 @@ export function Pill({
 }
 
 export function StatusPill({ status }: { status: VideoStatus }) {
-  const live = status === 'rendering' || status === 'publishing';
+  const live = status === 'draft' || status === 'rendering' || status === 'publishing';
   return (
     <Pill tone={STATUS_TONE[status]} pulse={live}>
-      {status.replace('_', ' ')}
+      {status === 'draft' ? 'writing script' : status.replace('_', ' ')}
     </Pill>
   );
 }

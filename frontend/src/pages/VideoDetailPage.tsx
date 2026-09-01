@@ -16,7 +16,8 @@ export function VideoDetailPage() {
   const [changeRequest, setChangeRequest] = useState('');
   const [regenProvider, setRegenProvider] = useState<Provider>('ollama');
 
-  const live = video?.status === 'rendering' || video?.status === 'publishing';
+  const live =
+    video?.status === 'draft' || video?.status === 'rendering' || video?.status === 'publishing';
   const lastEvent = useVideoEvents(videoId, Boolean(live));
 
   if (isLoading) return <Card>Loading…</Card>;
@@ -51,6 +52,31 @@ export function VideoDetailPage() {
           ▸ {lastEvent.message ?? `${lastEvent.step} ${lastEvent.status}`}
         </div>
       )}
+      {video.status === 'draft' && (
+        <Card style={{ marginBottom: 24, borderColor: 'var(--accent)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--accent)',
+                animation: 'pulse-amber 1.6s ease-in-out infinite',
+              }}
+            >
+              ✍︎ REC
+            </span>
+            <div>
+              <div style={{ fontWeight: 600 }}>
+                {video.story ? 'Rewriting the script with your changes…' : 'Writing the script…'}
+              </div>
+              <div style={{ color: 'var(--text-2)', fontSize: 12 }}>
+                Reasoning models can take five to fifteen minutes. This page updates itself — the
+                story appears here for review the moment it's ready.
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {video.status === 'failed' && (
         <Card style={{ borderColor: 'var(--warn)', marginBottom: 16 }}>
           <div style={{ color: 'var(--warn)', fontWeight: 600, marginBottom: 4 }}>
@@ -59,9 +85,16 @@ export function VideoDetailPage() {
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)', marginBottom: 12 }}>
             {video.error}
           </div>
-          <Button variant="primary" busy={retry.isPending} onClick={() => retry.mutate(video.id)}>
-            Retry step (reuses finished assets)
-          </Button>
+          {video.current_step === 'script' ? (
+            <div style={{ color: 'var(--text-2)', fontSize: 12 }}>
+              Script generation failed — delete this video and generate again, or (if a story
+              version exists below) request changes to regenerate.
+            </div>
+          ) : (
+            <Button variant="primary" busy={retry.isPending} onClick={() => retry.mutate(video.id)}>
+              Retry step (reuses finished assets)
+            </Button>
+          )}
         </Card>
       )}
 

@@ -14,7 +14,9 @@ export interface AppConfig {
   ollamaModel: string;
   ollamaEmbedModel: string;
   claudeCliPath: string;
+  claudeModel: string;
   codexCliPath: string;
+  codexModel: string;
   codexInputCostPerMTok: number;
   codexOutputCostPerMTok: number;
   geminiApiKey: string;
@@ -60,7 +62,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     ollamaModel: env.OLLAMA_MODEL ?? 'qwen3.6:latest',
     ollamaEmbedModel: env.OLLAMA_EMBED_MODEL ?? 'qwen3-embedding:0.6b',
     claudeCliPath: env.CLAUDE_CLI_PATH ?? 'claude',
+    claudeModel: env.CLAUDE_MODEL ?? 'opus',
     codexCliPath: env.CODEX_CLI_PATH ?? 'codex',
+    codexModel: env.CODEX_MODEL ?? 'gpt-5.6-sol',
     codexInputCostPerMTok: Number(env.CODEX_INPUT_COST_PER_MTOK ?? 1.25),
     codexOutputCostPerMTok: Number(env.CODEX_OUTPUT_COST_PER_MTOK ?? 10),
     geminiApiKey: env.GEMINI_API_KEY ?? '',

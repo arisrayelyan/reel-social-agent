@@ -8,10 +8,15 @@ export interface VideoDetail extends Video {
   publications: Publication[];
 }
 
+const LIVE_STATUSES = new Set(['draft', 'approved', 'rendering', 'publishing']);
+
 export function useVideo(id: number) {
   return useQuery<VideoDetail>({
     queryKey: ['videos', String(id)],
     queryFn: () => api.get<VideoDetail>(`/api/videos/${id}`).then((r) => r.data),
     enabled: Number.isFinite(id),
+    // polling insurance while the script writes or the pipeline runs (SSE is primary)
+    refetchInterval: (query) =>
+      query.state.data && LIVE_STATUSES.has(query.state.data.status) ? 3_000 : false,
   });
 }

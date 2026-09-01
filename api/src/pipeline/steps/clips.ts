@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import { BEAT_GAP_SECONDS, type Story } from '@reel-agent/shared';
+import type { Story } from '@reel-agent/shared';
+import { beatTargetSeconds } from './merge.js';
 import { FalClient } from '../../clients/fal.js';
 import { buildMotionPrompt } from '../../utils/storyPost.js';
 import { contentHash } from '../../utils/hash.js';
@@ -38,7 +39,10 @@ export async function runClipsStep(app: FastifyInstance, videoId: number, story:
     if (!keyframe) throw new Error(`No keyframe for beat ${beat.index}`);
     if (!beatAudio?.duration_seconds) throw new Error(`No audio for beat ${beat.index}`);
 
-    const targetSeconds = Number(beatAudio.duration_seconds) + BEAT_GAP_SECONDS;
+    const targetSeconds = beatTargetSeconds(
+      Number(beatAudio.duration_seconds),
+      beat.index === story.beats.length - 1,
+    );
     const motionPrompt = buildMotionPrompt(beat.motion_prompt, beat.camera_locked);
     const hash = contentHash({
       keyframeHash: keyframe.content_hash,

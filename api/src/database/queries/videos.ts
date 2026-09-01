@@ -27,6 +27,21 @@ export async function findVideoById(
   return rows[0] ?? null;
 }
 
+/** Creates a bare draft row immediately; the script is generated async. */
+export async function createDraftVideo(
+  app: FastifyInstance,
+  params: { topic: string; embedding: number[] | null },
+): Promise<VideoRow> {
+  const { rows } = await app.pg.query<VideoRow>(
+    `INSERT INTO videos (topic, status, current_step, topic_embedding)
+     VALUES ($1, 'draft', 'script', $2)
+     RETURNING id, topic, hook, status, current_step, story, story_versions, error,
+               total_cost_usd, created_at, updated_at`,
+    [params.topic, params.embedding ? JSON.stringify(params.embedding) : null],
+  );
+  return rows[0]!;
+}
+
 /** Creates a draft video with its first story version. */
 export async function createVideo(
   app: FastifyInstance,
@@ -61,7 +76,10 @@ export async function updateVideoStory(
     `UPDATE videos
         SET story = $2,
             hook = $3,
+            topic = $5,
             status = 'story_review',
+            current_step = NULL,
+            error = NULL,
             story_versions = story_versions || $4::jsonb,
             updated_at = now()
       WHERE id = $1
@@ -74,6 +92,7 @@ export async function updateVideoStory(
       JSON.stringify([
         { story, change_request: changeRequest, created_at: new Date().toISOString() },
       ]),
+      story.topic,
     ],
   );
   return rows[0] ?? null;

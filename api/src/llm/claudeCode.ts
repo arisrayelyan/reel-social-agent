@@ -18,14 +18,21 @@ interface ClaudeCliEnvelope {
 export class ClaudeCodeProvider implements LlmProvider {
   readonly name = 'claude-code' as const;
 
-  constructor(private readonly cliPath: string) {}
+  constructor(
+    private readonly cliPath: string,
+    private readonly model: string = '',
+  ) {}
 
   async generateJson<T>(opts: GenerateJsonOptions<T>): Promise<LlmResult<T>> {
     const prompt = `${opts.system}\n\n${opts.prompt}`;
     const { stdout } = await execa(
       this.cliPath,
-      ['-p', prompt, '--output-format', 'json'],
-      { timeout: 300_000 },
+      [
+        '-p', prompt,
+        '--output-format', 'json',
+        ...(this.model ? ['--model', this.model] : []),
+      ],
+      { timeout: 900_000 },
     );
     const envelope = JSON.parse(stdout) as ClaudeCliEnvelope;
     if (envelope.type === 'result' && envelope.subtype && envelope.subtype !== 'success') {
@@ -38,7 +45,7 @@ export class ClaudeCodeProvider implements LlmProvider {
       outputTokens: envelope.usage?.output_tokens ?? null,
       costUsd: envelope.total_cost_usd ?? 0,
       raw,
-      model: 'claude-code',
+      model: this.model || 'claude-code',
     };
   }
 }

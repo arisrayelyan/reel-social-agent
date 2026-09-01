@@ -92,7 +92,7 @@ export function GeneratePage() {
         </div>
         {generateStory.isPending && (
           <div style={{ marginTop: 12, color: 'var(--text-2)', fontSize: 12 }}>
-            Writing the script with {provider}… this can take a minute.
+            Starting… you'll be taken to the video page where the script writes live.
           </div>
         )}
       </Card>
