@@ -1,0 +1,29 @@
+{
+  "name": "reel-social-agent",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Automated agent producing True-WTF micro-documentary reels and pushing them to TikTok drafts",
+  "scripts": {
+    "dev": "concurrently -n api,front,captions -c blue,green,magenta \"pnpm --filter @reel-agent/api dev\" \"pnpm --filter @reel-agent/frontend dev\" \"pnpm --filter @reel-agent/captions dev\"",
+    "dev:tts": "cd services/tts && ./run.sh",
+    "build": "pnpm --filter @reel-agent/shared build && pnpm --filter @reel-agent/api build && pnpm --filter @reel-agent/frontend build && pnpm --filter @reel-agent/captions build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "migrate": "pnpm --filter @reel-agent/api migrate",
+    "migrate:create": "pnpm --filter @reel-agent/api migrate:create",
+    "migrate:down": "pnpm --filter @reel-agent/api migrate:down",
+    "postinstall": "pnpm --filter @reel-agent/shared build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@google/genai",
+      "esbuild",
+      "msgpackr-extract",
+      "protobufjs"
+    ]
+  }
+}

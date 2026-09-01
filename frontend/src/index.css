@@ -1,0 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  /* edit-bay palette */
+  --bg-0: #101418;
+  --bg-1: #171c22;
+  --bg-2: #1f262e;
+  --line: #2a333d;
+  --text-1: #e8edf2;
+  --text-2: #8b98a5;
+  --text-3: #5c6873;
+  --accent: #e8b84b;      /* timecode amber: active, rendering, primary actions */
+  --accent-dim: #6b5623;
+  --go: #56c784;          /* approved / published / healthy */
+  --warn: #e06952;        /* failed / missing */
+  --info: #5ba8d9;        /* review states */
+  --font-ui: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-0);
+  color: var(--text-1);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden; /* only <main> scrolls */
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: var(--font-ui);
+}
+
+input,
+textarea,
+select {
+  font-family: var(--font-ui);
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text-1);
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-2);
+  border-radius: 5px;
+  border: 2px solid var(--bg-0);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes pulse-amber {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}

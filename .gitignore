@@ -1,0 +1,27 @@
+# deps
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# env
+.env
+.env.local
+
+# builds
+dist/
+build/
+*.tsbuildinfo
+
+# generated media & runtime artifacts
+storage/
+*.wav
+*.mp3
+*.mp4
+*.png
+!frontend/public/**/*.png
+
+# misc
+.DS_Store
+coverage/
+.remotion/

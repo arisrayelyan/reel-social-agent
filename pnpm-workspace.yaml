@@ -1,0 +1,5 @@
+packages:
+  - shared
+  - api
+  - frontend
+  - services/captions
