@@ -29,7 +29,16 @@ export interface OverlayProps {
   stamps: OverlayCue[];
   /** EXHIBIT-style tags on map/diagram beats. */
   exhibits: OverlayCue[];
+  /**
+   * Small mono "AI RECONSTRUCTION" tag under the first stamp. TikTok requires
+   * AIGC showing realistic scenes or people to be labelled, and our whole
+   * catalogue is reconstructed crisis events — the tag keeps the reel honest
+   * on screen, independent of the platform toggle. Null when disabled.
+   */
+  notice: OverlayCue | null;
 }
+
+export const RECONSTRUCTION_NOTICE = 'AI RECONSTRUCTION';
 
 /**
  * The visual span of each beat on the global timeline.
@@ -58,6 +67,7 @@ export function buildOverlay(
   story: Story,
   cues: readonly CaptionCue[],
   durationSeconds: number,
+  opts: { reconstructionTag?: boolean } = {},
 ): OverlayProps {
   const spans = beatSpans(cues, durationSeconds);
   const hook = story.overlay_hook?.trim() ? story.overlay_hook.trim() : null;
@@ -89,5 +99,17 @@ export function buildOverlay(
     if (cue) exhibits.push({ ...cue, text: beat.exhibit_tag.trim().toUpperCase() });
   });
 
-  return { hook, stamps, exhibits };
+  // rides with the first stamp (the setup beat); without a stamp it takes the
+  // setup beat's own window so the label still appears once, early
+  let notice: OverlayCue | null = null;
+  if (opts.reconstructionTag ?? true) {
+    const first = stamps[0] ?? (() => {
+      const index = story.beats.findIndex((beat) => beat.role === 'setup');
+      const cue = index === -1 ? null : window(index);
+      return cue ? { ...cue, text: '' } : null;
+    })();
+    if (first) notice = { text: RECONSTRUCTION_NOTICE, start: first.start, end: first.end };
+  }
+
+  return { hook, stamps, exhibits, notice };
 }

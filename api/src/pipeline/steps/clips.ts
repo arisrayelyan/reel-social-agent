@@ -5,6 +5,7 @@ import { beatTargetSeconds } from './merge.js';
 import { FalClient } from '../../clients/fal.js';
 import { capsFor } from '../../clients/falModels.js';
 import { buildMotionPrompt } from '../../utils/storyPost.js';
+import { expansionFlags } from '../../utils/expansion.js';
 import { contentHash, seedFromHash } from '../../utils/hash.js';
 import { beatPrefix, ensureDir, stageDir, toAbsolute, toRelative } from '../../utils/files.js';
 import {
@@ -139,6 +140,17 @@ export async function runClipsStep(
       endImageUrl,
     });
     const clip = await client.awaitClip(submission, outputPath);
+    const flags = expansionFlags(clip.expandedPrompt, beat.camera_locked);
+    if (flags.length > 0) {
+      await publishEvent(app, {
+        video_id: videoId,
+        step: 'clips',
+        status: 'progress',
+        level: 'warning',
+        beat_index: beat.index,
+        message: `Beat ${beat.index + 1}: fal rewrote the motion as ${flags.join(', ')} — check the clip before approving`,
+      });
+    }
 
     await insertAsset(app, {
       videoId,
@@ -169,6 +181,7 @@ export async function runClipsStep(
         // what the endpoint ACTUALLY generated from: prompt_expansion_mode
         // defaults to "balanced", so it rewrites our motion prompt first
         expanded_prompt: clip.expandedPrompt,
+        expansion_flags: flags,
         timings: clip.timings,
       },
       costUsd: clip.costUsd,

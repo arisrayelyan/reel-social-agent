@@ -10,6 +10,20 @@ export interface SynthesisResult {
   wav_path: string;
   duration_seconds: number;
   words: WordTiming[];
+  word_count?: number;
+  /** The model's native pace over the speech span, before any stretch. */
+  measured_wpm?: number;
+  /** atempo factor applied (1 = none, floor 0.8). */
+  stretch_factor?: number;
+  /** What the listener hears. */
+  delivery_wpm?: number;
+}
+
+export interface PaceParams {
+  /** 0 disables the time-stretch. */
+  targetWpm: number;
+  /** 0 = one chunk per beat (no inter-sentence silence). */
+  sentenceGapSeconds: number;
 }
 
 /**
@@ -23,6 +37,7 @@ export class TtsClient {
     text: string;
     outPath: string;
     seed?: number;
+    pace?: PaceParams;
   }): Promise<SynthesisResult> {
     // One in-client retry after a short pause: a long-idle Chatterbox process
     // can wedge on its first request (macOS App Nap / MPS state) and recover.
@@ -34,6 +49,9 @@ export class TtsClient {
           text: params.text,
           out_path: params.outPath,
           seed: params.seed,
+          ...(params.pace
+            ? { target_wpm: params.pace.targetWpm, sentence_gap_s: params.pace.sentenceGapSeconds }
+            : {}),
         }),
       });
       if (res.ok) return (await res.json()) as SynthesisResult;

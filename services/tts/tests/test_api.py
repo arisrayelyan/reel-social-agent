@@ -10,16 +10,22 @@ import torch
 from fastapi.testclient import TestClient
 
 import app.main as main
+from app.synth import Synthesis
 
 
 class StubSynth:
     device = "cpu"
     load_seconds = 0.0
+    last_kwargs: dict = {}
 
-    def synthesize(self, text: str, out_path: str, seed=None):
+    def synthesize(self, text: str, out_path: str, seed=None, sentence_gap_s=None, target_wpm=None):
+        StubSynth.last_kwargs = {"sentence_gap_s": sentence_gap_s, "target_wpm": target_wpm}
         sr = 16000
         audio = torch.zeros(1, sr * 2)  # 2s of silence
-        return 2.0, audio, sr
+        return Synthesis(
+            duration_seconds=2.0, audio=audio, sample_rate=sr, word_count=2,
+            measured_wpm=190.0, stretch_factor=0.8, delivery_wpm=152.0,
+        )
 
 
 @pytest.fixture()
@@ -49,6 +55,26 @@ def test_synthesize_returns_duration_and_fallback_words(client, tmp_path):
     assert len(body["words"]) >= 1
     assert body["words"][0]["start"] >= 0.0
     assert body["words"][-1]["end"] <= 2.0 + 0.1
+    # pace telemetry travels back so the api can log it per beat
+    assert body["measured_wpm"] == 190.0
+    assert body["stretch_factor"] == 0.8
+    assert body["delivery_wpm"] == 152.0
+
+
+def test_synthesize_forwards_pace_overrides(client, tmp_path):
+    out = str(tmp_path / "beat.wav")
+    res = client.post(
+        "/synthesize",
+        json={"text": "hello world", "out_path": out, "target_wpm": 140, "sentence_gap_s": 0.5},
+    )
+    assert res.status_code == 200
+    assert StubSynth.last_kwargs == {"sentence_gap_s": 0.5, "target_wpm": 140}
+
+
+def test_synthesize_defaults_pace_to_service_settings(client, tmp_path):
+    out = str(tmp_path / "beat.wav")
+    client.post("/synthesize", json={"text": "hello world", "out_path": out})
+    assert StubSynth.last_kwargs == {"sentence_gap_s": None, "target_wpm": None}
 
 
 def test_synthesize_validates_body(client):

@@ -2,11 +2,13 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import {
   HOOK_EXAMPLE_POOL,
+  HOOK_UPGRADE_PAIRS,
   SLOP_PHRASES_PROMPT_SAMPLE,
   TARGET_DURATION_SECONDS,
   TARGET_WORD_COUNT,
   WORDS_PER_MINUTE,
   type HookExample,
+  type HookUpgrade,
 } from '@reel-agent/shared';
 
 /**
@@ -77,6 +79,29 @@ function renderHookExamples(examples: readonly HookExample[]): string {
   return examples.map((e) => '- ' + e.form + ': `' + e.text + '`').join('\n');
 }
 
+/** How many weak→strong pairs reach the prompt out of HOOK_UPGRADE_PAIRS. */
+export const HOOK_UPGRADES_PER_PROMPT = 2;
+
+/**
+ * Two weak→strong pairs, rotated from the topic like the form examples. The
+ * strong line is what a specific, sensory, loss-aware hook looks like; the
+ * weak line is the topical summary every model reaches for first.
+ */
+export function sampleHookUpgrades(topic: string, seed?: number): HookUpgrade[] {
+  const base = seed ?? hashString(`${topic}::upgrades`);
+  const limit = HOOK_UPGRADE_PAIRS.length;
+  const picked: HookUpgrade[] = [];
+  for (let step = 0; step < limit && picked.length < HOOK_UPGRADES_PER_PROMPT; step++) {
+    const candidate = HOOK_UPGRADE_PAIRS[(base + step * 5) % limit]!;
+    if (!picked.includes(candidate)) picked.push(candidate);
+  }
+  return picked;
+}
+
+function renderHookUpgrades(pairs: readonly HookUpgrade[]): string {
+  return pairs.map((p) => '- weak: `' + p.weak + '` → strong: `' + p.strong + '`').join('\n');
+}
+
 /**
  * Quoted, NOT backticked. Backticks in story.user.md mean exactly one thing -
  * "example prose that must not be reused" - and storyPromptExamples() reads
@@ -104,6 +129,10 @@ export function storyPromptExamples(promptsDir: string, topic = 'Lake Nyos'): st
     if (span.split(/\s+/).filter(Boolean).length >= 3) spans.add(span);
   }
   for (const example of sampleHookExamples(topic)) spans.add(example.text);
+  for (const pair of sampleHookUpgrades(topic)) {
+    spans.add(pair.weak);
+    spans.add(pair.strong);
+  }
   return [...spans];
 }
 
@@ -134,6 +163,7 @@ export function buildStoryPrompt(
     topic,
     source_block: sourceBlock,
     hook_examples: renderHookExamples(sampleHookExamples(topic)),
+    hook_upgrades: renderHookUpgrades(sampleHookUpgrades(topic)),
     banned_phrases: renderBannedPhrases(),
     min_words: TARGET_WORD_COUNT.min,
     max_words: TARGET_WORD_COUNT.max,

@@ -32,7 +32,9 @@ The single strongest operational pattern across the article and the skills: **sh
 
 ## 3. Motion prompt rules (validated + additions)
 
-Confirmed by the skills, keep as is: motion-only prompts, fixed negative block appended server-side, `camera_locked` beats, each motion verb used once per video, subject motion in ≥4 beats.
+Confirmed by the skills, keep as is: motion-only prompts, fixed negative block appended server-side, `camera_locked` beats, each motion verb used once per video, subject motion in ≥5 beats (raised from 4 on 2 Sep 2026, and now an error).
+
+**Measured 2 Sep 2026 on `minimax/h3-max` under `prompt_expansion_mode: balanced`:** the endpoint's own `expanded_prompt` for beats that asked for a push-in or a spreading tide came back "Static Shot … small amplitude at slow speed … emphasizing the absolute tranquility". The default is now `quality` (same price, ~30s), and `clips.ts` records `expansion_flags` (`static_shot`, `small_amplitude`, `tranquil`, …) on every clip so a flattened rewrite is visible at render review. The negative block also changed: people are allowed, so it now bans only the face-to-camera turn and lip movement.
 
 Additions from the Kling / Happy Horse / Learn guides:
 

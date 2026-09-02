@@ -53,6 +53,16 @@ export interface AppConfig {
   firecrawlMaxLinkedPages: number;
   firecrawlCostPerPageUsd: number;
   ttsUrl: string;
+  /**
+   * Delivery pace sent with every /synthesize call and folded into the TTS
+   * content hash, so a pace change re-renders narration instead of silently
+   * reusing cached wavs. 152: a touch brisker than the 145 planning rate, so
+   * estimates run ~5% long — Aram's call after listening to the 145 take.
+   */
+  ttsTargetWpm: number;
+  ttsSentenceGapSeconds: number;
+  /** Small mono "AI RECONSTRUCTION" tag under the evidence stamp (TikTok AIGC labelling). */
+  reconstructionTag: boolean;
   captionsUrl: string;
   tiktokClientKey: string;
   tiktokClientSecret: string;
@@ -102,7 +112,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     falVideoResolution: env.FAL_VIDEO_RESOLUTION ?? '768P',
     falVideoModelDraft: env.FAL_VIDEO_MODEL_DRAFT ?? '',
     falVideoResolutionDraft: env.FAL_VIDEO_RESOLUTION_DRAFT ?? '480P',
-    falPromptExpansionMode: env.FAL_PROMPT_EXPANSION_MODE ?? 'balanced',
+    falPromptExpansionMode: env.FAL_PROMPT_EXPANSION_MODE ?? 'quality',
     loopableKicker: (env.LOOPABLE_KICKER ?? 'true') !== 'false',
     falCostPerSecondUsd: Number(env.FAL_COST_PER_SECOND_USD ?? 0.04),
     falCostPerSecondUsdMap: parseCostMap(env.FAL_COST_PER_SECOND_USD_MAP),
@@ -110,6 +120,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     firecrawlMaxLinkedPages: Number(env.FIRECRAWL_MAX_LINKED_PAGES ?? 4),
     firecrawlCostPerPageUsd: Number(env.FIRECRAWL_COST_PER_PAGE_USD ?? 0.005),
     ttsUrl: env.TTS_URL ?? 'http://localhost:4042',
+    ttsTargetWpm: Number(env.TTS_TARGET_WPM ?? 152),
+    ttsSentenceGapSeconds: Number(env.TTS_SENTENCE_GAP_SECONDS ?? 0.35),
+    reconstructionTag: (env.RECONSTRUCTION_TAG ?? 'true') !== 'false',
     captionsUrl: env.CAPTIONS_URL ?? 'http://localhost:4043',
     tiktokClientKey: env.TIKTOK_CLIENT_KEY ?? '',
     tiktokClientSecret: env.TIKTOK_CLIENT_SECRET ?? '',

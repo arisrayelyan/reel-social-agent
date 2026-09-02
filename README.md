@@ -1,6 +1,6 @@
 # Reel Social Agent
 
-An automated agent that produces **true "WTF?" micro-documentary reels** (65–85s vertical videos) for **@oneminutewtf**. It researches topics, writes beat-by-beat scripts, generates keyframes (Google Nano Banana), animates them (fal.ai MiniMax H3 Max image-to-video), narrates them locally (Chatterbox TTS), merges everything with ffmpeg so audio drives timing, burns kinetic captions with Remotion, and tracks every token and dollar in a dashboard. TikTok inbox upload is built but currently parked — finished videos are reviewed and downloaded from the dashboard, with a Telegram ping when a render is ready.
+An automated agent that produces **true "WTF?" micro-documentary reels** (50–65s vertical videos) for **@oneminutewtf**. It researches topics, writes beat-by-beat scripts, generates keyframes (Google Nano Banana), animates them (fal.ai MiniMax H3 Max image-to-video), narrates them locally (Chatterbox TTS), merges everything with ffmpeg so audio drives timing, burns kinetic captions with Remotion, and tracks every token and dollar in a dashboard. TikTok inbox upload is built but currently parked — finished videos are reviewed and downloaded from the dashboard, with a Telegram ping when a render is ready.
 
 ## Architecture
 
@@ -112,6 +112,7 @@ Edit them freely — in dev they are re-read on every generation.
 ```bash
 pnpm test                                  # api (vitest, uses reel-agent-test DB) + frontend + captions
 cd services/tts && .venv/bin/python -m pytest    # TTS service (stubbed model)
+pnpm tts:calibrate                                 # free: measures delivered wpm on the running TTS service
 RUN_SLOW=1 .venv/bin/python -m pytest            # + real model synthesis test (~3GB download)
 pnpm typecheck                             # strict TS across all workspaces
 ```

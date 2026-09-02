@@ -10,6 +10,8 @@ This replaces "archival = old". Old stories get period stock; fresh stories get 
 - **The overlay layer** (Remotion, not generated): mono/typewriter secondary font (IBM Plex Mono) for location/date stamps in the upper third ("LAKE NYOS, CAMEROON — AUGUST 1986" / "BALTIMORE HARBOR — MARCH 2024"), thin 1px rule lines, small EXHIBIT-style tags on map/diagram beats. One stamp on the setup beat, one on the reveal, never more. Kinetic captions stay as-is.
 - **Motion grammar**: existing rules (subject motion, unique verbs, 2–3 locked beats) unchanged.
 - **Kicker ritual**: haunting loopable final frame, stamp-free, so the loop is clean.
+- **AI RECONSTRUCTION tag** (Remotion): small mono line under the first stamp. TikTok requires AIGC that shows realistic scenes or people to be labelled, and every reel on this channel is a reconstructed crisis event. `RECONSTRUCTION_TAG=false` turns it off; do not.
+- **People in frame** (§7): anonymous figures and faces are part of the record. The old `no people` line is gone from the prefix and the motion negatives.
 
 ## 2. Root `DEFAULT_STYLE_PREFIX` (drop-in for `shared/src/constants.ts`)
 
@@ -18,7 +20,7 @@ documentary evidence photograph captured in the event's own era on the era's own
 medium, period-accurate capture characteristics, one motivated light source with
 a clear direction, honest shadows, real surface wear and imperfections, truthful
 unstaged composition, vertical 9:16 composition, cinematic, single image,
-no grid, no text, no labels, no collage, no watermark, no people, no modern branding.
+no grid, no text, no labels, no collage, no watermark, no modern branding.
 ```
 
 ## 3. Per-story `style_prefix` skeleton (for `prompts/story.user.md` STYLE section)
@@ -87,3 +89,17 @@ surface wear, vertical 9:16 composition, cinematic.
 - Filled prefix is copied byte-identical across every beat (pipeline-learnings rule, unchanged).
 - Overlay stamps are Remotion-rendered only — never ask the image model for text (the `no text` suffix stays).
 - Era of the *capture medium* follows the era of the *event*, not the mood. A 2023 story in Tri-X is a lie; the channel promise is truth.
+
+## 7. People and spectacle (added 2 Sep 2026)
+
+The first published reels failed the channel promise in the opposite direction from the AI-slop we were guarding against: they were tasteful still-lifes. A floating-island story showed paper on a desk in four of seven beats and never showed the island; a lahar that buried a town opened on a mud stain on a wall. The cause was our own grammar — eight object framings, a hard `no people` rule, an imperfection lexicon made of decay, "drift" as the default camera and two force-locked beats.
+
+**People.** Allowed and wanted. Anonymous, period-accurate figures in the clothes and postures of the place and year; faces are fine. At least one beat carries a human for scale or reaction (`image.human_presence` warns). Four framings were added so the grammar can hold a person: `close-up of`, `medium shot of`, `over-the-shoulder view of`, `point of view from`.
+
+What stays banned, as errors: corpses, the dying, injuries, blood, victims in distress (`image.graphic_content` — for a death beat shoot the absence). What stays banned, as a warning: the face of a real named individual (`image.named_likeness` — show their hands, back, instrument or seat). Never children in danger. TikTok's Community Guidelines (Sep 2025) allow realistic AI people when labelled; they remove "dead bodies", "the moment of someone's death" and realistic AIGC that "misleads about a crisis event". Hence the on-screen tag in §1 and the AI-generated toggle at publish.
+
+**Money shots.** The hook beat and at least one turn or reveal beat show the event itself at its most extreme documented moment, in progress, at scale. The hook is never paperwork (`image.hook_is_document`, error); at most one beat per video shows paper, maps, screens or desks (`image.document_beats`). One aerial or wide beat carries the full scale; one human-scale beat stands inside it.
+
+**Atmosphere over decay.** A beat satisfies the "record of the event" test with either a wear detail or a physical atmosphere fact — rain, ash haze, spray, steam, smoke, backlight through a gap (`ATMOSPHERE_CUES`). Airless clean surfaces are the render tell; a catastrophe has weather.
+
+**Motion.** The hook has the strongest subject motion in the video and is never locked (`motion.hook_locked`, error). Five beats move the scene (`story.subject_motion_count`, error). Exactly two locked beats, never hook, turn or reveal. Event-scale verbs (surge, flood, collapse, erupt, tear, race, crash, ignite, run, scatter, roll) are in the vocabulary; "explodes"/"shatters" left the implausible list. fal runs `prompt_expansion_mode: quality`, and any rewrite that comes back as "Static Shot / small amplitude / tranquil" on an unlocked beat is flagged in `generation_runs.output.expansion_flags` and the activity log.

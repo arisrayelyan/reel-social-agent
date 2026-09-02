@@ -6,9 +6,11 @@ reuses their wording. Never backtick a line the model is SUPPOSED to copy
 (capture-medium lines, shot-type prefixes) — those stay unquoted.
 
 STRUCTURE (question → evidence → complication → answer):
-- 8 to 12 beats. Use the roles in order: hook, setup, escalation, turn, reveal, kicker. You may repeat setup, escalation, turn or reveal, but include exactly ONE hook and exactly ONE kicker.
+- 7 to 10 beats. Use the roles in order: hook, setup, escalation, turn, reveal, kicker. You may repeat setup, escalation, turn or reveal, but include exactly ONE hook and exactly ONE kicker.
 - The hook states the anomaly. Setup establishes the ordinary reality and the documented causal event. Escalation gives the strongest obvious explanation. The turn introduces one specific fact that explanation cannot account for. The reveal explains the mechanism literally. The kicker supplies one final verified consequence, measurement, decision or present-day detail.
-- The first turn must land before ~25 seconds at {{wpm}} words per minute. Do not pad the opening to reach a timestamp.
+- HUMAN PRESENCE: within the first two beats, put a specific person or group in an ordinary moment — named when the source names them, described by role when it does not (the night-shift operator, a farmer walking to the paddies). Tell the story through what they saw, heard or did. A reel with no human in it is a catalogue of facts, and nobody finishes a catalogue.
+- RE-HOOK: the first turn beat's narration must open a SECOND explicit open question, phrased as a statement of what did not add up — a new loop that the reveal closes. One loop at zero seconds and a second at the turn is what carries the middle.
+- The first turn must land before ~22 seconds at {{wpm}} words per minute. Do not pad the opening to reach a timestamp.
 - Every beat must add new information. Do not restate the hook, do not summarise the beat that is coming, and never announce that the story is about to get stranger.
 - Every non-kicker beat ends by withholding ONE concrete cause, consequence, measurement, decision or mechanism that the next beat pays off. That withheld thing is what stops the swipe.
 - The reveal must answer the hook's exact wording literally, not a related or weaker claim.
@@ -26,17 +28,21 @@ THE HOOK (this decides whether anyone watches):
   - evidence question — one specific question whose answer is not obvious from the wording.
 - Two examples of the FORM only. Reusing their wording is auto-flagged and sent back:
 {{hook_examples}}
+- Weak → strong, so you can see the difference. The weak version is the topical summary every writer reaches for first; the strong one is specific, sensory and carries a cost. Reusing these is also auto-flagged:
+{{hook_upgrades}}
 - Carry at least one concrete noun, place, object, action or measurement whenever the source supports one.
+- LOSS FRAMING: when the story has a victim, a cost or something that was lost, phrase the hook around the loss rather than the phenomenon. What was taken lands harder than what happened.
 - Never open with a date or "At exactly" — dates belong in the setup beat, unless the date itself is the anomaly.
 - Never use "everyone", "nobody" or "no one" unless the source explicitly supports that scope.
 - Never make the hook louder than the evidence.
 
 NARRATION — HARD RULES (read aloud by a voice engine):
-- Total: {{min_words}}-{{max_words}} words ({{min_seconds}}-{{max_seconds}} seconds at {{wpm}} wpm). Per-beat narration under 300 characters.
+- Total: {{min_words}}-{{max_words}} words ({{min_seconds}}-{{max_seconds}} seconds at {{wpm}} wpm). Per-beat narration under 300 characters and at most 22 words; the hook beat at most 12 words. A beat over that is a nine-second hold on one animated still.
 - Write ALL numbers as spoken words: "1,746" → "one thousand seven hundred and forty six", "CO2" → "carbon dioxide", "1986" → "nineteen eighty six". NO digits anywhere in narration.
 - NO bracketed tags or stage directions — no [sigh], [pause], (laughs). The engine reads them aloud.
 - Every beat ends with a complete sentence and terminal punctuation (. ! ?). Never end a beat on a comma, dash or ellipsis — it sounds cut off.
 - Vary sentence length deliberately. Across the script include some short sentences of three to seven words, some medium of eight to sixteen, and occasionally one of seventeen to twenty-four. Never write more than three consecutive sentences in the same length band — even rhythm is the clearest sign of machine writing.
+- SENSORY BEAT: at least one sentence in the script puts the viewer inside the moment with a verified physical detail — what it sounded like, how cold, how fast, what it smelled of. A fact the body can feel outlasts a fact the mind files.
 - Prefer concrete nouns, named places, physical actions, measurements, documents, tools and decisions. Avoid abstract filler: "the situation", "the phenomenon", "the mystery", "the truth", "the reality", "the forces at play", "things".
 - Never describe or point at the picture. No "look at", "we see", "pictured here", "in this image" — the viewer is already looking. The narration adds cause, consequence, scale, mechanism, context or a documented human action.
 - At most two adjectives for one noun. Prefer a measured or material detail over a mood adjective. No prestige adjectives in narration.
@@ -47,23 +53,27 @@ NARRATION — HARD RULES (read aloud by a voice engine):
 - Only verified facts. If a detail is uncertain, drop it.
 
 CINEMATOGRAPHY — image_prompt per beat:
-- START each image_prompt with exactly one shot type, then the subject: "extreme close-up of...", "detail shot of...", "interior of...", "wide shot of...", "aerial view of...", "low angle of...", "overhead view of...", "silhouette of...".
+- START each image_prompt with exactly one shot type, then the subject: "extreme close-up of...", "close-up of...", "detail shot of...", "medium shot of...", "over-the-shoulder view of...", "point of view from...", "interior of...", "wide shot of...", "aerial view of...", "low angle of...", "overhead view of...", "silhouette of...".
 - Use at least 5 DIFFERENT shot types across the video. Never use the same shot type in adjacent beats.
-- Every image reads as a document of the event, not an illustration of it: name ONE motivated light source WITH a direction, keep shadows honest, and include ONE concrete wear or imperfection detail (chipped, rusted, water-stained, dust in the light shaft, a bent sign, condensation). Clean surfaces read as renders.
+- MONEY SHOTS: the hook beat AND at least one turn or reveal beat show the event itself at its most extreme documented moment, in progress, at scale — the gas cloud rolling downhill, the island of trees adrift on open water, the mudflow filling the valley, the wave crossing the street. Traces, aftermath and paperwork are supporting beats. The hook is never a document, a desk, a screen or an empty room: the first frame is the cover image and the swipe decision.
+- PAPERWORK CAP: at most ONE beat per video may show paper, maps, screens, printouts, folders or desks. Everything else shows places, weather, machines, water, fire, sky and people.
+- PEOPLE: people are allowed and wanted — anonymous, period-accurate figures in the clothes and postures of the place and year. At least one beat carries a human figure for scale or reaction (a back turned to the event, hands on a rail, a face lit by the glow). Never corpses, the dying, injuries, blood or victims in distress: for a death beat, shoot the absence — the empty doorway, the cold fire pit, the boots by the bed. Never render the face of a real named individual; show their hands, back, instrument or seat instead. Never children in danger.
+- SCALE: one aerial or wide beat shows the full scale of the event; one human-scale beat stands inside it.
+- Every image reads as a document of the event, not an illustration of it: name ONE motivated light source WITH a direction, keep shadows honest, and include ONE concrete wear or imperfection detail (chipped, rusted, water-stained, a bent sign, condensation) OR one physical atmosphere fact (rain, ash haze, spray, steam, smoke, dust in the air, backlight through a gap, lamplight in rain). Clean, airless surfaces read as renders.
 - Compose off-centre and truthfully — include a real wall, edge, corner or horizon. Dead-centre subjects, everything-in-focus and seamless gradient backgrounds are the machine tells.
-- Shot grammar by role: hook = the closest, most visually specific evidence of the anomaly, never a generic establishing landscape; setup = human-scale evidence (objects, interiors, documents, machines, maps); escalation and turn = change scale or focal plane only when the contrast clarifies the evidence; reveal = the clearest physical or procedural explanation; kicker = a concrete final image that can visually rhyme with the hook.
+- Shot grammar by role: hook = the closest, most visually extreme evidence of the anomaly in progress, never a generic establishing landscape and never paperwork; setup = the ordinary world with its people in it; escalation and turn = change scale or focal plane only when the contrast clarifies the evidence; reveal = the clearest physical or procedural explanation; kicker = a concrete final image that can visually rhyme with the hook.
 - Subject, composition and photographic facts only. No style words, no prestige adjectives, no director names, no booru tags, no weighted parentheses, no captions or labels. The style prefix is prepended automatically.
-- No people, faces, bodies, corpses or victims. Show the absence instead — traces, objects, an interior after the fact, or distant human-scale context.
 
 MOTION — motion_prompt per beat:
 - Under 30 words. Describe motion ONLY — never re-describe the frame, its subject, lighting, geography, era or composition.
 - ONE physically plausible motion event per beat. If the action is complex, that is a story problem: split the beat.
+- THE HOOK MOVES MOST: the hook beat carries the strongest subject motion in the video and is never camera_locked. A drifting still in the first two seconds is the AI-slideshow tell, and the viewer is gone.
 - At most ONE camera cue per beat. Every non-locked beat must name its camera behaviour explicitly, even if it is only "camera drifts slowly right" — an unspecified camera defaults to a flat slow zoom.
-- Camera vocabulary, each with the reason to use it: push-in (pressure), pull-back (isolation, reveal of scale), crane up (scale release), crane down (descent into detail), tilt up or down (reveal), pan left or right (lateral survey), drift left or right (the honest default), orbit (inspection — the object IS the fact), macro glide (texture — the surface is the evidence), rack focus (attention shift between two named details), handheld (documentary instability).
-- At least 4 beats must have SUBJECT motion inside the frame, not only camera movement.
+- Camera vocabulary, each with the reason to use it: push-in (pressure), pull-back (isolation, reveal of scale), crane up (scale release), crane down (descent into detail), tilt up or down (reveal), pan left or right (lateral survey), tracking (follows a moving subject — the event is happening), orbit (inspection — the object IS the fact), macro glide (texture — the surface is the evidence), rack focus (attention shift between two named details), handheld (documentary instability), drift left or right (last resort, only when nothing in the frame moves).
+- At least 5 beats must have SUBJECT motion inside the frame, not only camera movement. Event-scale motion is welcome and expected: water surges, mud rolls, roofs give way, fire spreads, people run, ash falls. Small motion (a crumb drops, a rope sways) is for the two quiet beats, not the whole video.
 - Use each substantive motion verb at most once across the whole video. Prefer a plain verb over a forced synonym.
-- camera_locked: true on exactly 2 or 3 quieter beats — static tripod shots are what stop the video reading as a drifting AI slideshow. A locked beat must NOT contain a camera move; it still describes subject motion within the fixed frame, unless the stillness itself is the documented evidence.
-- Never use cuts, transitions, extreme slow motion, time-lapse, reverse, morphing or conflicting simultaneous actions. The fixed negatives are appended server-side.
+- camera_locked: true on exactly 2 quieter beats — never the hook, the turn or the reveal. Static tripod shots are what stop the video reading as a drifting AI slideshow. A locked beat must NOT contain a camera move; it still describes subject motion within the fixed frame, unless the stillness itself is the documented evidence.
+- Never use cuts, transitions, extreme slow motion, time-lapse, reverse, morphing or conflicting simultaneous actions. Nobody in frame turns to face the camera or speaks. The fixed negatives are appended server-side.
 
 STYLE — style_prefix (one reusable line for THIS story):
 - Build it from this exact skeleton, filled for this story:

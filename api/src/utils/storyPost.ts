@@ -119,11 +119,13 @@ export function postProcessStory(
   // normalizer knows the pre-forcing count, because the validator sees the
   // story after the mutation has already run.
   if (beats.filter((b) => b.camera_locked).length < 2) {
-    // Force late non-hook beats static rather than reject the story. Beats
-    // whose motion_prompt names no camera move go first: forcing a beat that
-    // asks for one trips motion.locked_has_camera_move (an error) and buys a
-    // paid craft retry for a story that is otherwise fine.
-    const lockable = (b: (typeof beats)[number]) => b.role !== 'hook' && !b.camera_locked;
+    // Force quieter beats static rather than reject the story. Never the hook
+    // (the cover's first two seconds must move), the turn or the reveal (the
+    // money shots). Beats whose motion_prompt names no camera move go first:
+    // forcing a beat that asks for one trips motion.locked_has_camera_move
+    // (an error) and buys a paid craft retry for a story that is otherwise fine.
+    const NEVER_LOCK = new Set(['hook', 'turn', 'reveal']);
+    const lockable = (b: (typeof beats)[number]) => !NEVER_LOCK.has(b.role) && !b.camera_locked;
     const hasMove = (b: (typeof beats)[number]) =>
       matchVerbKeys(b.motion_prompt, CAMERA_VERBS).length > 0;
     const candidates = [

@@ -36,6 +36,7 @@ const RenderBodySchema = z.object({
       hook: z.string().max(120).nullish(),
       stamps: z.array(OverlayCueSchema).default([]),
       exhibits: z.array(OverlayCueSchema).default([]),
+      notice: OverlayCueSchema.nullish(),
     })
     .nullish(),
 });
@@ -70,6 +71,7 @@ app.post('/render', async (request, reply) => {
       hook: overlay?.hook ?? null,
       stamps: overlay?.stamps ?? [],
       exhibits: overlay?.exhibits ?? [],
+      notice: overlay?.notice ?? null,
     },
     concurrency: CONCURRENCY,
   });

@@ -1,15 +1,22 @@
 import {
+  ATMOSPHERE_CUES,
   BEAT_GAP_SECONDS,
   BEAT_ROLE_ORDER,
   CAMERA_BEHAVIOR_TERMS,
   CAMERA_VERBS,
   CAPTURE_MEDIA,
+  DOCUMENT_SUBJECT_TERMS,
+  GENERIC_MOTION_VERBS,
+  GRAPHIC_CONTENT_TERMS,
   IMPERFECTION_CUES,
   IMPLAUSIBLE_MOTION,
   INSTITUTIONAL_CAM_ID,
   LIGHT_DIRECTIONS,
+  MAX_BEAT_WORDS,
+  MAX_HOOK_BEAT_WORDS,
   MAX_SENTENCE_WORDS,
   MIN_SENTENCE_STDEV,
+  PERSON_TERMS,
   PICTURE_DESCRIBING_PHRASES,
   PRESTIGE_ADJECTIVES,
   SHOT_TYPES,
@@ -143,6 +150,18 @@ const FAL_DOC = 'docs/fal-video-generation.md';
 const STYLE_DOC = 'docs/visual-style.md';
 const HOOK_DOC = 'docs/hook-improvement-plan.md';
 
+/**
+ * Something in the frame moves: the curated vocabulary OR ordinary physical
+ * motion. The curated list alone under-counted real motion on the eval
+ * ("runners stagger forward", "condensation drips") and errored good stories.
+ */
+function hasSubjectMotion(motionPrompt: string): boolean {
+  return (
+    matchVerbKeys(motionPrompt, SUBJECT_MOTION_VERBS).length > 0 ||
+    matchPhrases(motionPrompt, GENERIC_MOTION_VERBS).length > 0
+  );
+}
+
 /** Beats licensed to name a capture medium in their own image_prompt. */
 function isInstitutionalCamBeat(imagePrompt: string): boolean {
   const medium = CAPTURE_MEDIA.find((m) => m.id === INSTITUTIONAL_CAM_ID)!;
@@ -174,18 +193,18 @@ export const STORY_RULES: readonly StoryRule[] = [
   {
     id: 'story.camera_locked_excess',
     severity: 'warning', field: 'story', scope: 'story', tier: 1,
-    source: `${PROMPT} MOTION (exactly 2-3 locked beats)`,
+    source: `${PROMPT} MOTION (exactly 2 locked beats)`,
     check: (ctx, emit) => {
       const locked = ctx.story.beats.filter((b) => b.camera_locked).length;
-      if (locked > 3) {
-        emit(null, `${locked} locked-camera beats — the grammar calls for exactly 2 or 3; more reads as a slideshow of stills`);
+      if (locked > 2) {
+        emit(null, `${locked} locked-camera beats — the grammar calls for exactly 2; more reads as a slideshow of stills`);
       }
     },
   },
   {
     id: 'story.beat_count',
     severity: 'warning', field: 'story', scope: 'story', tier: 1,
-    source: `${PROMPT} STRUCTURE (8 to 12 beats)`,
+    source: `${PROMPT} STRUCTURE (7 to 10 beats)`,
     check: (ctx, emit) => {
       const n = ctx.story.beats.length;
       if (n < TARGET_BEAT_COUNT.min || n > TARGET_BEAT_COUNT.max) {
@@ -275,6 +294,11 @@ export const STORY_RULES: readonly StoryRule[] = [
     severity: 'error', field: 'motion_prompt', scope: 'story', tier: 1,
     source: `${PROMPT} MOTION (each verb at most once) / ${FAL_DOC} §3`,
     check: (ctx, emit) => {
+      // The same camera move twice is the drifting-slideshow tell — an error.
+      // A repeated subject verb ("rises" on steam and on heat) is a warning:
+      // the aliases also match nouns ("floor cracks"), and the eval showed
+      // that erroring on it sends a good story into a paid retry.
+      const cameraKeys = new Set(CAMERA_VERBS.map((v) => v.key));
       const seen = new Map<string, number[]>();
       for (const beat of ctx.story.beats) {
         const keys = [
@@ -287,7 +311,12 @@ export const STORY_RULES: readonly StoryRule[] = [
       }
       for (const [key, beats] of seen) {
         if (beats.length > 1) {
-          emit(null, `Motion verb "${key}" is used in beats ${beats.join(', ')} — each verb may appear once per video`, key);
+          emit(
+            null,
+            `Motion verb "${key}" is used in beats ${beats.join(', ')} — each verb may appear once per video`,
+            key,
+            cameraKeys.has(key) ? 'error' : 'warning',
+          );
         }
       }
     },
@@ -321,15 +350,16 @@ export const STORY_RULES: readonly StoryRule[] = [
     },
   },
   {
+    // Was a tier-2 warning at 4. Both reels published on 2 Sep 2026 shipped
+    // with 2–3 moving beats and read as slideshows; an error buys the rewrite
+    // retry inside the existing 2-call budget.
     id: 'story.subject_motion_count',
-    severity: 'warning', field: 'motion_prompt', scope: 'story', tier: 2,
-    source: `${PROMPT} MOTION (at least 4 beats with subject motion)`,
+    severity: 'error', field: 'motion_prompt', scope: 'story', tier: 1,
+    source: `${PROMPT} MOTION (at least 5 beats with subject motion)`,
     check: (ctx, emit) => {
-      const moving = ctx.story.beats.filter(
-        (b) => matchVerbKeys(b.motion_prompt, SUBJECT_MOTION_VERBS).length > 0,
-      ).length;
-      if (moving < 4) {
-        emit(null, `Only ${moving} beat${moving === 1 ? '' : 's'} move the scene rather than just the camera — at least 4 are required, or it reads as a drifting slideshow`);
+      const moving = ctx.story.beats.filter((b) => hasSubjectMotion(b.motion_prompt)).length;
+      if (moving < 5) {
+        emit(null, `Only ${moving} beat${moving === 1 ? '' : 's'} move the scene rather than just the camera — at least 5 are required, or it reads as a drifting slideshow`);
       }
     },
   },
@@ -527,6 +557,20 @@ export const STORY_RULES: readonly StoryRule[] = [
     },
   },
   {
+    id: 'narration.beat_word_cap',
+    severity: 'warning', field: 'narration', scope: 'beat', tier: 1,
+    source: 'shared/src/constants.ts MAX_BEAT_WORDS / MAX_HOOK_BEAT_WORDS',
+    check: (ctx, emit) => {
+      for (const beat of ctx.story.beats) {
+        const n = wordsOf(beat.narration).length;
+        const cap = beat.role === 'hook' ? MAX_HOOK_BEAT_WORDS : MAX_BEAT_WORDS;
+        if (n > cap) {
+          emit(beat.index, `${n} words in one ${beat.role} beat (cap ${cap}) — that is a ${((n / 145) * 60).toFixed(0)}s hold on a single animated still`, beat.narration.slice(0, 60));
+        }
+      }
+    },
+  },
+  {
     id: 'narration.rule_of_three',
     severity: 'warning', field: 'narration', scope: 'beat', tier: 2,
     source: 'AI-writing tell: rule-of-three lists',
@@ -600,15 +644,78 @@ export const STORY_RULES: readonly StoryRule[] = [
     },
   },
   {
-    id: 'image.people',
+    // Replaces image.people (2 Sep 2026). People are allowed; the dead,
+    // the dying and the injured are not — TikTok removes "dead bodies" and
+    // "the moment of someone's death" regardless of label, and Gemini refuses.
+    id: 'image.graphic_content',
     severity: 'error', field: 'image_prompt', scope: 'beat', tier: 1,
-    source: `${PROMPT} CINEMATOGRAPHY (no people, never bodies)`,
+    source: `${STYLE_DOC} §7 (people yes, corpses/injury never)`,
     check: (ctx, emit) => {
       for (const beat of ctx.story.beats) {
-        const match = beat.image_prompt.match(/\b(people|person|man|woman|child|children|crowd|face|faces|body|bodies|corpse|corpses|victim|victims)\b/i);
-        if (match) {
-          emit(beat.index, `image_prompt names "${match[0]}" — the format shoots the absence, and figures at distance render wrong anyway`, match[0]);
+        const hits = matchPhrases(beat.image_prompt, GRAPHIC_CONTENT_TERMS);
+        if (hits.length > 0) {
+          emit(beat.index, `image_prompt names "${hits[0]}" — shoot the absence for death beats: the empty doorway, the cold fire pit, the boots by the bed`, hits[0]!);
         }
+      }
+    },
+  },
+  {
+    // The inverse of the rule it replaced: a reel with no human in any frame
+    // is a still-life catalogue, and the research report's storyboard asks
+    // for a person beat and a human/result image.
+    id: 'image.human_presence',
+    severity: 'warning', field: 'image_prompt', scope: 'story', tier: 2,
+    source: `${STYLE_DOC} §7 (at least one beat carries a human figure)`,
+    check: (ctx, emit) => {
+      const withPeople = ctx.story.beats.filter((b) => matchPhrases(b.image_prompt, PERSON_TERMS).length > 0);
+      if (withPeople.length === 0) {
+        emit(null, 'No beat puts a human figure in frame — one beat with a person for scale or reaction is what separates a record of an event from a catalogue of objects');
+      }
+    },
+  },
+  {
+    // A capitalised two-word name that appears in both the narration and an
+    // image_prompt is probably a real person being rendered by face.
+    id: 'image.named_likeness',
+    severity: 'warning', field: 'image_prompt', scope: 'beat', tier: 2,
+    source: `${STYLE_DOC} §7 (never the face of a real named individual)`,
+    check: (ctx, emit) => {
+      const narrationNames = new Set(
+        ctx.story.beats.flatMap((b) => [...b.narration.matchAll(/\b([A-Z][a-z]+ [A-Z][a-z]+)\b/g)].map((m) => m[1]!)),
+      );
+      if (narrationNames.size === 0) return;
+      for (const beat of ctx.story.beats) {
+        for (const name of narrationNames) {
+          if (beat.image_prompt.includes(name)) {
+            emit(beat.index, `image_prompt renders "${name}", a named person from the narration — TikTok bans real likenesses; show their hands, back, instrument or seat instead`, name);
+          }
+        }
+      }
+    },
+  },
+  {
+    // A published reel opened on a printout on a desk and never showed the
+    // island. The hook frame is the cover image and the swipe decision.
+    id: 'image.hook_is_document',
+    severity: 'error', field: 'image_prompt', scope: 'beat', tier: 1,
+    source: `${PROMPT} CINEMATOGRAPHY (the hook shows the event, never paperwork)`,
+    check: (ctx, emit) => {
+      const hook = ctx.story.beats.find((b) => b.role === 'hook');
+      if (!hook) return;
+      const hits = matchPhrases(hook.image_prompt, DOCUMENT_SUBJECT_TERMS);
+      if (hits.length > 0) {
+        emit(hook.index, `The hook image is paperwork ("${hits[0]}") — the first frame is the cover and the swipe decision; it has to show the event itself at its most extreme moment`, hits[0]!);
+      }
+    },
+  },
+  {
+    id: 'image.document_beats',
+    severity: 'warning', field: 'image_prompt', scope: 'story', tier: 2,
+    source: `${PROMPT} CINEMATOGRAPHY (at most one document beat per video)`,
+    check: (ctx, emit) => {
+      const docs = ctx.story.beats.filter((b) => matchPhrases(b.image_prompt, DOCUMENT_SUBJECT_TERMS).length > 0);
+      if (docs.length > 1) {
+        emit(null, `${docs.length} beats show paper, maps, screens or desks (beats ${docs.map((b) => b.index).join(', ')}) — one is licensed; the rest should show the event`);
       }
     },
   },
@@ -631,11 +738,14 @@ export const STORY_RULES: readonly StoryRule[] = [
   {
     id: 'image.imperfection',
     severity: 'warning', field: 'image_prompt', scope: 'beat', tier: 2,
-    source: `${FAL_DOC} §4 / ${STYLE_DOC} §1 (real surface wear)`,
+    source: `${FAL_DOC} §4 / ${STYLE_DOC} §1 (real surface wear or a physical atmosphere fact)`,
     check: (ctx, emit) => {
       for (const beat of ctx.story.beats) {
-        if (matchPhrases(beat.image_prompt, IMPERFECTION_CUES).length === 0) {
-          emit(beat.index, 'No concrete wear or imperfection detail — clean surfaces read as renders, not as a record of the event');
+        if (
+          matchPhrases(beat.image_prompt, IMPERFECTION_CUES).length === 0 &&
+          matchPhrases(beat.image_prompt, ATMOSPHERE_CUES).length === 0
+        ) {
+          emit(beat.index, 'No concrete wear detail and no atmosphere fact (rain, ash, spray, smoke, backlight) — clean, airless surfaces read as renders, not as a record of the event');
         }
       }
     },
@@ -730,6 +840,24 @@ export const STORY_RULES: readonly StoryRule[] = [
         if (moves.length > 0) {
           emit(beat.index, `Locked beat asks for a camera move ("${moves.join('", "')}") — the tripod line is appended server-side and will contradict it`, moves[0]!);
         }
+      }
+    },
+  },
+  {
+    // The hook has the strongest motion in the video, by rule: it is the
+    // cover frame's first two seconds. A locked hook, or one whose motion is
+    // camera-only, is exactly the "AI slideshow" first impression.
+    id: 'motion.hook_locked',
+    severity: 'error', field: 'motion_prompt', scope: 'beat', tier: 1,
+    source: `${PROMPT} MOTION (the hook beat has the strongest motion, never locked)`,
+    check: (ctx, emit) => {
+      const hook = ctx.story.beats.find((b) => b.role === 'hook');
+      if (!hook) return;
+      if (hook.camera_locked) {
+        emit(hook.index, 'The hook beat is camera_locked — the opening two seconds must move', 'camera_locked');
+      }
+      if (!hasSubjectMotion(hook.motion_prompt)) {
+        emit(hook.index, 'The hook motion_prompt names no subject motion — something in the frame has to be happening, not just the camera', hook.motion_prompt.slice(0, 60));
       }
     },
   },

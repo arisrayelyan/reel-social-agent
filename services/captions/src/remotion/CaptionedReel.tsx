@@ -13,6 +13,8 @@ export interface OverlayProps {
   hook: string | null;
   stamps: OverlayCue[];
   exhibits: OverlayCue[];
+  /** "AI RECONSTRUCTION" under the first stamp — the AIGC label, on screen. */
+  notice?: OverlayCue | null;
 }
 
 export interface CaptionedReelProps {
@@ -61,6 +63,7 @@ export const CaptionedReel: React.FC<CaptionedReelProps> = ({ videoSrc, cues, ov
       {(overlay?.exhibits ?? []).map((exhibit, i) => (
         <ExhibitTag key={`exhibit-${i}`} cue={exhibit} t={t} />
       ))}
+      {overlay?.notice ? <ReconstructionNotice cue={overlay.notice} t={t} /> : null}
 
       {hook ? <HookOverlay text={hook} t={t} frame={frame} fps={fps} /> : null}
 
@@ -188,6 +191,34 @@ const EvidenceStamp: React.FC<{ cue: OverlayCue; t: number }> = ({ cue, t }) => 
             boxShadow: `0 0 3px ${STROKE}`,
           }}
         />
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+/**
+ * The AIGC disclosure, in the annotation face, tucked under the stamp's rule
+ * line. Small on purpose: it is a label, not a hook.
+ */
+const ReconstructionNotice: React.FC<{ cue: OverlayCue; t: number }> = ({ cue, t }) => {
+  const opacity = overlayCueOpacityAt(cue, t);
+  if (opacity <= 0) return null;
+  return (
+    <AbsoluteFill style={{ justifyContent: 'flex-start', alignItems: 'center', paddingTop: 372 }}>
+      <div
+        style={{
+          opacity: opacity * 0.85,
+          fontFamily: MONO,
+          fontWeight: 500,
+          fontSize: 22,
+          letterSpacing: '0.22em',
+          textTransform: 'uppercase',
+          color: '#FFFFFF',
+          WebkitTextStroke: `4px ${STROKE}`,
+          paintOrder: 'stroke fill',
+        }}
+      >
+        {cue.text}
       </div>
     </AbsoluteFill>
   );

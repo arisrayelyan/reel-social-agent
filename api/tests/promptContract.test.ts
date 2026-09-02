@@ -5,6 +5,7 @@ import {
   CAMERA_VERBS,
   CAPTURE_MEDIA,
   HOOK_EXAMPLE_POOL,
+  HOOK_UPGRADE_PAIRS,
   SHOT_TYPES,
   SLOP_PHRASES,
   SLOP_PHRASES_PROMPT_SAMPLE,
@@ -17,9 +18,11 @@ import {
 } from '@reel-agent/shared';
 import {
   HOOK_EXAMPLES_PER_PROMPT,
+  HOOK_UPGRADES_PER_PROMPT,
   buildStoryPrompt,
   loadPrompt,
   sampleHookExamples,
+  sampleHookUpgrades,
   storyPromptExamples,
   storySystem,
   topicsSystem,
@@ -37,7 +40,9 @@ const template = () => loadPrompt(promptsDir, 'story.user.md');
  */
 const HARD_RULES: Array<{ name: string; re: RegExp }> = [
   { name: '145 wpm', re: /145 wpm/ },
-  { name: 'word envelope', re: /150-190 words/ },
+  { name: 'word envelope', re: /120-150 words/ },
+  { name: 'beat word cap', re: /at most 22 words/ },
+  { name: 'hook beat word cap', re: /hook beat at most 12 words/ },
   { name: 'no digits', re: /NO digits/i },
   { name: 'numbers as spoken words', re: /spoken words/i },
   { name: 'no stage directions', re: /\[sigh\]/ },
@@ -50,19 +55,35 @@ const HARD_RULES: Array<{ name: string; re: RegExp }> = [
   { name: 'no picture description', re: /[Nn]ever describe or point at the picture/ },
   { name: 'names the pointing phrases', re: /look at/ },
   { name: 'withheld payoff per beat', re: /withholding ONE concrete/ },
+  { name: 'human presence early', re: /HUMAN PRESENCE: within the first two beats/ },
+  { name: 're-hook at the turn', re: /RE-HOOK/ },
+  { name: 'sensory beat', re: /SENSORY BEAT/ },
+  { name: 'loss framing', re: /LOSS FRAMING/ },
+  { name: 'weak to strong pairs', re: /weak: `/ },
   { name: 'motion only', re: /[Dd]escribe motion ONLY/ },
   { name: 'motion under 30 words', re: /[Uu]nder 30 words/ },
   { name: 'one camera cue maximum', re: /[Aa]t most ONE camera cue/ },
   { name: 'explicit camera on non-locked beats', re: /flat slow zoom/ },
   { name: 'plausible physics', re: /physically plausible/ },
   { name: 'verb once per video', re: /at most once across the whole video/ },
-  { name: '2-3 camera_locked', re: /exactly 2 or 3 quieter beats/ },
+  { name: 'exactly 2 camera_locked', re: /exactly 2 quieter beats/ },
+  { name: 'never lock hook, turn or reveal', re: /never the hook, the turn or the reveal/ },
+  { name: 'the hook moves most', re: /THE HOOK MOVES MOST/ },
+  { name: 'five subject-motion beats', re: /At least 5 beats must have SUBJECT motion/ },
+  { name: 'event-scale motion welcome', re: /Event-scale motion is welcome/ },
   { name: 'at least 5 shot types', re: /at least 5 DIFFERENT shot types/i },
   { name: 'imperfection detail', re: /wear or imperfection detail/ },
   { name: 'light source with direction', re: /motivated light source WITH a direction/ },
   { name: 'off-centre composition', re: /off-centre/ },
   { name: 'no style words in image prompts', re: /No style words/ },
-  { name: 'no people or bodies', re: /No people, faces, bodies/ },
+  { name: 'people allowed', re: /people are allowed and wanted/ },
+  { name: 'never corpses or injuries', re: /Never corpses, the dying, injuries/ },
+  { name: 'never a real named face', re: /Never render the face of a real named individual/ },
+  { name: 'money shots', re: /MONEY SHOTS/ },
+  { name: 'hook is never paperwork', re: /The hook is never a document/ },
+  { name: 'paperwork cap', re: /at most ONE beat per video may show paper/ },
+  { name: 'scale beat', re: /one aerial or wide beat shows the full scale/ },
+  { name: 'atmosphere alternative', re: /one physical atmosphere fact/ },
   { name: 'Evidence File skeleton', re: new RegExp(STYLE_PREFIX_OPENER) },
   { name: 'exactly one capture medium', re: /exactly ONE capture medium/ },
   { name: 'era follows the event', re: /era of the EVENT/ },
@@ -162,12 +183,29 @@ describe('example discipline (the slop fix has to stay fixed)', () => {
     expect(template()).not.toMatch(/\([^)]*"[^"]{15,}"/);
   });
 
-  it('extracts exactly the injected hook examples', () => {
+  it('extracts exactly the injected hook examples and weak→strong pairs', () => {
     const extracted = storyPromptExamples(promptsDir, TOPIC);
-    expect(extracted).toHaveLength(HOOK_EXAMPLES_PER_PROMPT);
-    for (const span of extracted) {
-      expect(HOOK_EXAMPLE_POOL.map((e) => e.text)).toContain(span);
+    expect(extracted).toHaveLength(HOOK_EXAMPLES_PER_PROMPT + 2 * HOOK_UPGRADES_PER_PROMPT);
+    const known = [
+      ...HOOK_EXAMPLE_POOL.map((e) => e.text),
+      ...HOOK_UPGRADE_PAIRS.flatMap((p) => [p.weak, p.strong]),
+    ];
+    for (const span of extracted) expect(known).toContain(span);
+  });
+
+  it('keeps every upgrade pair short, slop-free and digit-free', () => {
+    for (const pair of HOOK_UPGRADE_PAIRS) {
+      expect(pair.strong.split(/\s+/).length, pair.strong).toBeLessThanOrEqual(10);
+      expect(matchPhrases(pair.strong, SLOP_PHRASES), pair.strong).toEqual([]);
+      expect(/\d/.test(pair.strong), pair.strong).toBe(false);
     }
+  });
+
+  it('samples upgrade pairs deterministically and distinctly', () => {
+    const picked = sampleHookUpgrades(TOPIC);
+    expect(picked).toHaveLength(HOOK_UPGRADES_PER_PROMPT);
+    expect(picked[0]).not.toBe(picked[1]);
+    expect(sampleHookUpgrades(TOPIC)).toEqual(picked);
   });
 
   it('keeps every pool example short and slop-free', () => {

@@ -18,7 +18,7 @@ import { publishEvent } from '../events.js';
  * Bump this when the caption LOOK changes (services/captions composition) —
  * it feeds the content hash so an unchanged video re-renders its captions.
  */
-export const CAPTION_STYLE_VERSION = 3;
+export const CAPTION_STYLE_VERSION = 4;
 
 /**
  * Burns the Evidence File overlay layer and kinetic captions over the merged
@@ -40,7 +40,9 @@ export async function runCaptionsStep(
   const cuesPath = path.join(exportDir, 'cues.json');
   const cues = JSON.parse(await readFile(cuesPath, 'utf8')) as CaptionCue[];
 
-  const overlay = buildOverlay(story, cues, Number(merged.duration_seconds));
+  const overlay = buildOverlay(story, cues, Number(merged.duration_seconds), {
+    reconstructionTag: app.config.reconstructionTag,
+  });
   const hash = contentHash({
     kind: 'final',
     merged: merged.content_hash,

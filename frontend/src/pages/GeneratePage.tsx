@@ -4,8 +4,10 @@ import type { Provider, TopicIdea } from '@reel-agent/shared';
 import { Button, Card, Pill, SectionLabel } from '@/components/design';
 import { useVideoMutations } from '@/hooks/useVideoMutations';
 
+// Ollama is temporarily hidden from this page (2 Sep 2026): a qwen3.6 story
+// generation exhausted the laptop mid-session. The provider still exists in
+// the API and the shared Provider type; restore the entry to bring it back.
 const PROVIDERS: Array<{ value: Provider; label: string; note: string }> = [
-  { value: 'ollama', label: 'Ollama · qwen3.6', note: 'free, local' },
   { value: 'claude-code', label: 'Claude Code', note: 'paid, best quality' },
   { value: 'codex', label: 'Codex', note: 'paid' },
 ];

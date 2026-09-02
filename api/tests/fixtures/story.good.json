@@ -9,29 +9,29 @@
   "beats": [
     {
       "role": "hook",
-      "narration": "Molasses killed twenty one people. It moved faster than they could run.",
-      "image_prompt": "extreme close-up of hardened amber syrup filling the seams between chipped cobblestones, pale winter light raking from the right",
-      "motion_prompt": "camera pushes in on the dark rivulet as it creeps between the stones",
+      "narration": "Molasses killed twenty one people. It outran them.",
+      "image_prompt": "wide shot of a brown wave taller than the tenement doors surging down a cobbled street, workers running ahead of it, hard midday sun from the south, sea spray hanging in the air, chipped cobblestones in the foreground",
+      "motion_prompt": "camera tracks alongside the brown wave as it surges down the street",
       "camera_locked": false,
       "index": 0,
-      "word_count": 12,
-      "duration_seconds": 4.97
+      "word_count": 8,
+      "duration_seconds": 3.31
     },
     {
       "role": "setup",
-      "narration": "The tank stood five storeys high on the harbour front. It held two and a half million gallons, waiting to become alcohol.",
-      "image_prompt": "wide shot of a rusted five-storey riveted steel tank against a winter harbour, low sun from the west, gulls absent, weeds through the gravel apron",
-      "motion_prompt": "the camera pulls back slowly while thin steam lifts from the harbour water",
+      "narration": "The tank stood five storeys high on the harbour front, holding two and a half million gallons of molasses.",
+      "image_prompt": "medium shot of a worker in a wool cap leaning on a rail below the rusted riveted steel tank, low winter sun from the west, steam off the harbour water behind him",
+      "motion_prompt": "thin steam lifts off the harbour water while the camera pulls back",
       "camera_locked": false,
       "index": 1,
-      "word_count": 22,
-      "duration_seconds": 9.1
+      "word_count": 19,
+      "duration_seconds": 7.86
     },
     {
       "role": "escalation",
-      "narration": "Neighbours had complained for years. The tank groaned. Children carried home cups of the sweet drips.",
+      "narration": "Neighbours had complained for years. The seams wept. Children carried home cups of the sweet drips.",
       "image_prompt": "detail shot of a weeping steel seam, dark residue staining the plate below each rusted rivet, light from above through a gap in the girders",
-      "motion_prompt": "a single bead swells at the seam and falls, and the frame holds still",
+      "motion_prompt": "a single bead swells at the seam and falls",
       "camera_locked": true,
       "index": 2,
       "word_count": 16,
@@ -39,73 +39,63 @@
     },
     {
       "role": "turn",
-      "narration": "The company answered by painting the tank brown. The leaks did not stop. They simply stopped being visible.",
+      "narration": "The company painted the tank brown. The leaks did not stop. They stopped being visible.",
       "image_prompt": "low angle of fresh brown paint over a cracked and peeling steel plate, side-lit from the left, brush marks catching the raking light",
       "motion_prompt": "the lens racks focus from the wet paint to the split beneath it",
       "camera_locked": false,
       "index": 3,
-      "word_count": 18,
-      "duration_seconds": 7.45
+      "word_count": 15,
+      "duration_seconds": 6.21
     },
     {
       "role": "escalation",
-      "narration": "On the fifteenth of January the temperature climbed almost twenty degrees. Inside, the molasses began to ferment.",
+      "narration": "On the fifteenth of January the temperature climbed almost twenty degrees. The molasses began to ferment.",
       "image_prompt": "overhead view of a mercury thermometer on a frost-cracked window ledge, condensation beading below it, morning light from the east",
       "motion_prompt": "the mercury column climbs and the beads of condensation slide downward",
       "camera_locked": true,
       "index": 4,
-      "word_count": 17,
-      "duration_seconds": 7.03
+      "word_count": 16,
+      "duration_seconds": 6.62
     },
     {
       "role": "turn",
-      "narration": "At half past twelve the rivets let go. Witnesses described a sound like a machine gun as the steel tore open.",
+      "narration": "At half past twelve the rivets let go, and witnesses two streets away heard a sound like a machine gun.",
       "image_prompt": "aerial view of a broad brown tide spreading across a wrecked waterfront street, splintered timber and a bent lamp standard, hard midday shadow from the south",
-      "motion_prompt": "the camera cranes up as the brown tide spreads across the street below",
+      "motion_prompt": "the camera cranes up as the tide rolls across the street below",
       "camera_locked": false,
       "index": 5,
-      "word_count": 21,
-      "duration_seconds": 8.69
-    },
-    {
-      "role": "reveal",
-      "narration": "The wave stood fifteen feet high. Molasses is heavier than water. It does not splash. It shoves.",
-      "image_prompt": "interior of a flooded ground-floor room, brown residue at chest height on stained wallpaper, a toppled stove, daylight through a broken window from the left",
-      "motion_prompt": "dark residue coils down the stained plaster while the frame stays fixed",
-      "camera_locked": true,
-      "index": 6,
-      "word_count": 17,
-      "duration_seconds": 7.03
-    },
-    {
-      "role": "reveal",
-      "narration": "The court found the tank had been built too thin and never tested. The steel was ordered without a margin.",
-      "image_prompt": "detail shot of a folded engineering drawing, dog-eared and smudged, a pencilled thickness figure circled twice, lamp light from directly above",
-      "motion_prompt": "the camera tilts down while the loose corner of the drawing settles flat",
-      "camera_locked": false,
-      "index": 7,
       "word_count": 20,
       "duration_seconds": 8.28
     },
     {
       "role": "reveal",
-      "narration": "Three years of hearings followed. The ruling changed American building law: engineers had to sign and stamp their plans.",
-      "image_prompt": "silhouette of a stamped and signed permit sheet held against a dusty window, backlit by grey afternoon sky, water-stained sill in the foreground",
-      "motion_prompt": "the shadow of the sill creeps across the paper as the camera drifts right",
+      "narration": "The wave stood fifteen feet high. Molasses is heavier than water. It shoves.",
+      "image_prompt": "interior of a flooded ground-floor room, brown residue at chest height on stained wallpaper, a toppled stove, daylight through a broken window from the left",
+      "motion_prompt": "dark residue coils down the stained plaster as the camera pushes in",
       "camera_locked": false,
-      "index": 8,
-      "word_count": 19,
-      "duration_seconds": 7.86
+      "index": 6,
+      "word_count": 13,
+      "duration_seconds": 5.38
+    },
+    {
+      "role": "reveal",
+      "narration": "The court found the tank was built too thin and never tested. The steel had no margin.",
+      "image_prompt": "detail shot of a folded engineering drawing, dog-eared and smudged, a pencilled thickness figure circled twice, lamp light from directly above",
+      "motion_prompt": "the camera tilts down while the loose corner of the drawing settles flat",
+      "camera_locked": false,
+      "index": 7,
+      "word_count": 17,
+      "duration_seconds": 7.03
     },
     {
       "role": "kicker",
-      "narration": "Crews washed the streets with sea water for weeks. Residents swore the harbour still smelled sweet on hot afternoons.",
+      "narration": "Crews washed the streets with sea water for weeks. Residents swore the harbour smelled sweet on hot afternoons.",
       "image_prompt": "aerial view of an empty cobbled quay at dusk, faded paint lines and a cracked drain grate, warm sodium lamp light from the north, salt crust in the joints",
       "motion_prompt": "a faint sheen ripples in the drain grate while the camera glides across the quay",
       "camera_locked": false,
-      "index": 9,
-      "word_count": 19,
-      "duration_seconds": 7.86
+      "index": 8,
+      "word_count": 18,
+      "duration_seconds": 7.45
     }
   ]
 }

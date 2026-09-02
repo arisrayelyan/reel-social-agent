@@ -47,7 +47,7 @@ export const StorySchema = z.object({
   /** Geography/era-specific style prefix for this story, byte-identical across beats. */
   style_prefix: z.string().min(20),
   /**
-   * Deliberately wider than the 8-12 the prompt asks for. Beat count is a
+   * Deliberately wider than the 7-10 the prompt asks for. Beat count is a
    * CRAFT rule, enforced as a `story.beat_count` warning in storyValidate —
    * not a schema bound: a schema failure feeds generateJsonWithRetry and burns
    * a second full generation (5-15 min on a reasoning model), and tightening
@@ -56,8 +56,12 @@ export const StorySchema = z.object({
   beats: z.array(BeatSchema).min(6).max(14),
 });
 
-/** What the prompt asks for; the validator warns outside this range. */
-export const TARGET_BEAT_COUNT = { min: 8, max: 12 } as const;
+/**
+ * What the prompt asks for; the validator warns outside this range. 7–10
+ * follows the 120–150 word envelope: ~15 words a beat keeps every hold under
+ * seven seconds, which is where a single animated still stops feeling static.
+ */
+export const TARGET_BEAT_COUNT = { min: 7, max: 10 } as const;
 
 /**
  * What we ask the LLM for. Deliberately more tolerant than StorySchema —

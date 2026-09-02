@@ -14,6 +14,12 @@ class Settings:
     exaggeration: float   # house preset 0.35 (flat, factual)
     device: str           # auto -> cuda > mps > cpu
     voice_ref: str | None # optional ~10s reference clip, locks timbre harder than a seed
+    # Delivery pace. Chatterbox exposes no rate control and the house preset
+    # measures 182–194 wpm on real beats (2 Sep 2026), so pace is produced
+    # AFTER synthesis: silence between sentences plus a pitch-preserving
+    # time-stretch down to target_wpm (0 disables the stretch).
+    target_wpm: float
+    sentence_gap_s: float
 
 
 def load_settings(env: dict[str, str] | None = None) -> Settings:
@@ -26,4 +32,6 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         exaggeration=float(e.get("TTS_EXAGGERATION", "0.35")),
         device=e.get("TTS_DEVICE", "auto"),
         voice_ref=e.get("TTS_VOICE_REF") or None,
+        target_wpm=float(e.get("TTS_TARGET_WPM", "152")),
+        sentence_gap_s=float(e.get("TTS_SENTENCE_GAP_SECONDS", "0.35")),
     )

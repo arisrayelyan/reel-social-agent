@@ -60,7 +60,9 @@ Both articles say a broken promise is worse than a weak hook.
 - Add a cheap LLM self-check call after story generation (Ollama tier is fine): "Given this hook and this reveal beat, does the story fully deliver the hook's promise? Answer JSON `{delivers: bool, gap: string}`." Surface `delivers: false` as a blocking warning in story review. One extra local call, zero render cost.
 - Add to `prompts/story.system.md`: "The reveal beat must answer the hook's promise **literally**, not approximately. If the hook says 'silently', the reveal must address the silence."
 
-### Phase 4 — Prompt-quality upgrades (no code)
+### Phase 4 — Prompt-quality upgrades (no code) — DONE 2 Sep 2026
+
+Implemented in `prompts/story.user.md` with prompt-contract tests: weak→strong pairs (`HOOK_UPGRADE_PAIRS`, rotated and leakage-checked like the form examples), the specificity rule, the loss-framing nudge, the re-hook rule on the first turn, a human-presence rule (a specific person in the first two beats) and a sensory-beat rule. The original notes follow.
 
 All in `prompts/`:
 
@@ -72,7 +74,9 @@ All in `prompts/`:
 - **tiktok_caption**: enforce first line ≤ 100 characters (pre-fold), and add the same no-spoiler check to `validateHook()` warnings (substring match against reveal-beat keywords is enough for a warning).
 - **Kicker loop**: add "the final frame and first frame should be visually rhymable (loopable): the kicker's last sentence may echo the hook's noun" — seamless loops inflate completion rate, the metric the algorithm actually pays.
 
-### Phase 5 — Audio hook + music bed (bigger lift, do last)
+### Phase 5 — Audio hook + music bed — SKIPPED BY DECISION (2 Sep 2026)
+
+Music is added in TikTok at post time, so the pipeline stays silent under narration. The notes below are kept for reference only.
 
 - New optional pipeline step `music` between `merge` and `captions`: a quiet tension bed under narration, ducked with `sidechaincompress`, from a small licensed/CC0 library keyed by story mood — start with 2–3 fixed tracks, env-configured, hash-keyed like every other step. No generative audio needed.
 - Audio hook experiment: start beat 0 narration at 0.0s (already the case) and consider a single sub-second sound trigger (low boom/riser) under the overlay. Gate behind a setting; measure before adopting.

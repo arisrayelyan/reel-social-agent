@@ -31,10 +31,22 @@ export interface ShotType {
   prefix: string;
 }
 
-/** The eight approved image_prompt openers (prompts/story.user.md CINEMATOGRAPHY). */
+/**
+ * The twelve approved image_prompt openers (prompts/story.user.md
+ * CINEMATOGRAPHY). The last four were added when people came back into the
+ * frame (docs/visual-style.md §7): the original eight are all object/space
+ * framings, and a grammar with no way to hold a person produces still-lifes.
+ * Order matters for shotTypeOf: "extreme close-up of" must precede "close-up of".
+ */
 export const SHOT_TYPES: readonly ShotType[] = [
   { id: 'extreme_close_up', prefix: 'extreme close-up of' },
+  { id: 'close_up', prefix: 'close-up of' },
   { id: 'detail', prefix: 'detail shot of' },
+  { id: 'medium', prefix: 'medium shot of' },
+  { id: 'over_shoulder', prefix: 'over-the-shoulder view of' },
+  // 'point of view' on purpose: Haiku wrote "point of view shot ..." and a
+  // paid retry over the preposition is not a craft failure
+  { id: 'pov', prefix: 'point of view' },
   { id: 'interior', prefix: 'interior of' },
   { id: 'wide', prefix: 'wide shot of' },
   { id: 'aerial', prefix: 'aerial view of' },
@@ -89,6 +101,26 @@ export const HOOK_EXAMPLE_POOL: readonly HookExample[] = [
   { form: 'evidence_question', text: 'Why was the bridge painted twice that week?' },
 ] as const;
 
+/**
+ * Weak → strong hook pairs (docs/hook-improvement-plan.md Phase 4). Few-shot
+ * pairs move output further than rules do. Injected into the prompt in
+ * backticks and rotated like HOOK_EXAMPLE_POOL, so a story that copies the
+ * strong line is flagged by story.example_leakage. Drawn from stories we
+ * would never produce, for the same reason as the pool.
+ */
+export interface HookUpgrade {
+  weak: string;
+  strong: string;
+}
+export const HOOK_UPGRADE_PAIRS: readonly HookUpgrade[] = [
+  { weak: 'A strange event happened at a Welsh mine.', strong: 'The canary lived. The miners did not.' },
+  { weak: 'An unusual weather event hit a small town.', strong: 'Hail the size of fists, in July, on one street.' },
+  { weak: 'A ship disappeared under mysterious circumstances.', strong: 'The lifeboats were still lashed to the deck.' },
+  { weak: 'A famous bridge had engineering problems.', strong: 'The bridge swayed for months. Then it twisted.' },
+  { weak: 'Something odd was found in an old church.', strong: 'Under the altar, a sealed door nobody had opened.' },
+  { weak: 'A city experienced a mysterious noise.', strong: 'A hum kept a whole town awake for years.' },
+] as const;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Motion vocabulary
 // ─────────────────────────────────────────────────────────────────────────────
@@ -104,23 +136,30 @@ export interface PromptVerb {
 
 /** Camera behaviour. At most ONE per beat; required on every non-locked beat. */
 export const CAMERA_VERBS: readonly PromptVerb[] = [
-  { key: 'push_in', purpose: 'pressure, intimacy', aliases: ['push in', 'push-in', 'pushes in', 'dolly in', 'moves closer', 'creeps toward', 'creeps in'] },
+  { key: 'push_in', purpose: 'pressure, intimacy', aliases: ['push in', 'push-in', 'pushes in', 'pushes closer', 'dolly in', 'moves closer', 'creeps toward', 'creeps in'] },
   { key: 'pull_back', purpose: 'isolation, reveal of scale', aliases: ['pull back', 'pull-back', 'pulls back', 'dolly out', 'pulls away', 'retreats from'] },
   { key: 'crane_up', purpose: 'scale release', aliases: ['crane up', 'cranes up', 'rises above', 'lifts over', 'boom up'] },
   { key: 'crane_down', purpose: 'descent into detail', aliases: ['crane down', 'cranes down', 'descends toward', 'lowers onto', 'boom down'] },
-  { key: 'tilt_up', purpose: 'upward reveal', aliases: ['tilt up', 'tilts up', 'tilts upward'] },
-  { key: 'tilt_down', purpose: 'downward reveal', aliases: ['tilt down', 'tilts down', 'tilts downward'] },
-  { key: 'pan_left', purpose: 'lateral survey', aliases: ['pans left', 'pan left'] },
-  { key: 'pan_right', purpose: 'lateral survey', aliases: ['pans right', 'pan right'] },
-  { key: 'drift_left', purpose: 'unmotivated drift — the honest default', aliases: ['drifts left', 'drifts slowly left', 'slides left'] },
-  { key: 'drift_right', purpose: 'unmotivated drift — the honest default', aliases: ['drifts right', 'drifts slowly right', 'slides right'] },
-  { key: 'orbit', purpose: 'inspection — the object IS the fact', aliases: ['orbits', 'arcs around', 'circles around', 'arcs slowly around'] },
+  { key: 'tilt_up', purpose: 'upward reveal', aliases: ['tilt up', 'tilts up', 'tilts upward', 'tilting up'] },
+  { key: 'tilt_down', purpose: 'downward reveal', aliases: ['tilt down', 'tilts down', 'tilts downward', 'tilting down'] },
+  { key: 'pan_left', purpose: 'lateral survey', aliases: ['pans left', 'pan left', 'panning left', 'pan to the left', 'right to left'] },
+  { key: 'pan_right', purpose: 'lateral survey', aliases: ['pans right', 'pan right', 'panning right', 'pan to the right', 'left to right'] },
+  { key: 'pan_across', purpose: 'lateral survey', aliases: ['pan across', 'pans across', 'slow pan', 'panning across', 'pans over', 'pan over'] },
+  { key: 'drift_left', purpose: 'last resort — only when nothing in the frame moves', aliases: ['drifts left', 'drifts slowly left', 'slides left'] },
+  { key: 'drift_right', purpose: 'last resort — only when nothing in the frame moves', aliases: ['drifts right', 'drifts slowly right', 'slides right'] },
+  { key: 'tracking', purpose: 'follows a moving subject — the event is happening', aliases: ['tracking shot', 'tracks alongside', 'tracks with', 'follows alongside', 'camera follows', 'keeps pace with'] },
+  { key: 'orbit', purpose: 'inspection — the object IS the fact', aliases: ['orbits', 'orbit around', 'slow orbit', 'orbiting', 'arcs around', 'circles around', 'circles the', 'arcs slowly around'] },
   { key: 'macro_glide', purpose: 'texture — the surface is the evidence', aliases: ['macro glide', 'glides across', 'glides over', 'skims the surface', 'travels across'] },
   { key: 'rack_focus', purpose: 'attention shift between two named details', aliases: ['rack focus', 'racks focus', 'focus shifts', 'focus pulls'] },
   { key: 'handheld', purpose: 'documentary instability', aliases: ['handheld', 'hand-held', 'slight sway', 'unsteady frame'] },
 ] as const;
 
-/** In-frame subject motion. >= 4 beats need one; at most two per beat. */
+/**
+ * In-frame subject motion. >= 5 beats need one; at most two per beat.
+ * The second block is the event vocabulary added 2 Sep 2026: the first list
+ * was all whisper-scale (a crumb drops, a rope sways), and a WTF channel whose
+ * biggest motion is a curling wisp reads as a slideshow.
+ */
 export const SUBJECT_MOTION_VERBS: readonly PromptVerb[] = [
   { key: 'rising', purpose: 'threat accumulating', aliases: ['rises', 'rising', 'climbs', 'creeps up', 'fills'] },
   { key: 'falling', purpose: 'aftermath', aliases: ['falls', 'falling', 'drifts down', 'rains down', 'sifts down'] },
@@ -138,11 +177,56 @@ export const SUBJECT_MOTION_VERBS: readonly PromptVerb[] = [
   { key: 'spilling', purpose: 'containment lost', aliases: ['spills', 'spilling', 'overtops', 'pours over'] },
   { key: 'rotating', purpose: 'machinery still running', aliases: ['turns', 'rotates', 'spins', 'revolves'] },
   { key: 'shadow_creep', purpose: 'time passing', aliases: ['shadow crosses', 'shadow creeps', 'light moves across', 'light slides across'] },
+  // event-scale motion — the documented catastrophe in progress
+  { key: 'surging', purpose: 'the event arriving', aliases: ['surges', 'surging', 'rushes in', 'rushes down', 'sweeps in', 'sweeps across', 'sweeps through'] },
+  { key: 'flooding', purpose: 'water taking ground', aliases: ['floods', 'flooding', 'inundates', 'swallows the', 'rises over', 'pours over', 'pours through', 'pours down'] },
+  { key: 'collapsing', purpose: 'structure failing', aliases: ['collapses', 'collapsing', 'gives way', 'buckles under', 'caves in', 'topples'] },
+  { key: 'erupting', purpose: 'pressure released', aliases: ['erupts', 'erupting', 'bursts from', 'bursts out', 'blows out', 'jets up', 'shoots up'] },
+  { key: 'tearing', purpose: 'containment ripping open', aliases: ['tears open', 'tears through', 'rips open', 'rips through', 'splits open', 'breaks apart', 'breaks free'] },
+  { key: 'racing', purpose: 'speed, pursuit', aliases: ['races', 'racing', 'speeds', 'hurtles', 'barrels down', 'streaks across'] },
+  { key: 'crashing', purpose: 'impact', aliases: ['crashes', 'crashing', 'slams into', 'smashes', 'hammers against', 'batters'] },
+  { key: 'igniting', purpose: 'fire starting or spreading', aliases: ['ignites', 'catches fire', 'flares up', 'flames spread', 'fire spreads', 'burns through', 'blazes'] },
+  { key: 'running', purpose: 'people reacting', aliases: ['people run', 'runs from', 'run toward', 'run from', 'scramble', 'scrambles', 'flee', 'flees', 'hurry', 'hurries'] },
+  { key: 'scattering', purpose: 'crowd or debris dispersing', aliases: ['scatters', 'scattering', 'scatter', 'disperse', 'flung', 'thrown across'] },
+  { key: 'rolling', purpose: 'a mass advancing', aliases: ['rolls down', 'rolls across', 'rolls over', 'rolls in', 'tumbles', 'churns'] },
 ] as const;
 
 /** Terms that read as "camera" even without a move verb (locked beats say these). */
 export const CAMERA_BEHAVIOR_TERMS: readonly string[] = [
   'camera', 'static', 'locked', 'tripod', 'fixed frame', 'frame holds', 'camera holds',
+  // bare cinematography nouns — "slow pan across", "orbit around", "lens racks"
+  'lens', 'pan', 'orbit', 'dolly', 'crane', 'tilt', 'zoom', 'tracking',
+] as const;
+
+/**
+ * Detection-only motion vocabulary. SUBJECT_MOTION_VERBS is the curated,
+ * purpose-tagged list the prompt teaches and the once-per-video rule polices;
+ * this broader list exists so story.subject_motion_count and motion.hook_locked
+ * recognise ordinary physical motion ("runners stagger forward", "condensation
+ * drips", "heat shimmer intensifies") instead of erroring a good story into a
+ * paid retry. Never used for the reuse rule.
+ */
+export const GENERIC_MOTION_VERBS: readonly string[] = [
+  // bare forms for plural subjects ("runners stagger", "clouds billow")
+  'stagger', 'stumble', 'run', 'walk', 'shift', 'sway', 'swirl', 'drip', 'swell', 'flow', 'spread',
+  'climb', 'fall', 'rise', 'billow', 'scatter', 'flee', 'tremble', 'shake', 'move', 'lean', 'slide',
+  'sink', 'drift', 'tumble', 'burst', 'pour', 'surge', 'crumble', 'collapse', 'flicker', 'shimmer',
+  'moves', 'moving', 'move forward', 'moves forward', 'walks', 'walking', 'walk', 'runs', 'running',
+  'steps', 'stepping', 'staggers', 'staggering', 'stumbles', 'stumbling', 'shifts', 'shifting',
+  'sways', 'swaying', 'swirls', 'swirling', 'swirl', 'drips', 'dripping', 'swells', 'swelling',
+  'intensifies', 'shimmer', 'shimmers', 'shimmering', 'wavers', 'wavering', 'waves', 'flows', 'flowing',
+  'streams', 'streaming', 'trickles', 'trickling', 'gushes', 'gushing', 'spreads', 'spreading',
+  'bends', 'bending', 'sinks', 'sinking', 'slides', 'sliding', 'slips', 'slipping', 'leans', 'leaning',
+  'reaches', 'reaching', 'grips', 'gripping', 'turns', 'turning', 'enters', 'entering', 'exits',
+  'passes', 'passing', 'crosses', 'crossing', 'climbs', 'climbing', 'descends', 'descending',
+  'drops', 'dropping', 'rains', 'snows', 'blows', 'blowing', 'gusts', 'flaps', 'flapping',
+  'flutters', 'fluttering', 'trembles', 'trembling', 'shakes', 'shaking', 'vibrates', 'rattles',
+  'tips', 'tipping', 'topples', 'tumbles', 'bursts', 'erupts', 'surges', 'floods', 'pours',
+  'billows', 'rises', 'rising', 'falls', 'falling', 'settles', 'spills', 'cracks open', 'splits',
+  'wipes', 'lifts', 'lowers', 'pulls', 'pushes forward', 'straining', 'strains', 'kneels', 'crouches',
+  'points', 'gestures', 'nods', 'breathes', 'breathing', 'pulses', 'flickers', 'glows brighter',
+  'dims', 'brightens', 'fades', 'darkens', 'lightens', 'churns', 'boils', 'bubbles', 'steams', 'smokes',
+  'ignites', 'burns', 'flares', 'sparks', 'crumbles', 'collapses', 'gives way', 'creaks', 'groans',
 ] as const;
 
 /** Every video family struggles with these (fal doc §3, §10). */
@@ -152,7 +236,9 @@ export const IMPLAUSIBLE_MOTION: readonly string[] = [
   'time reverses', 'in reverse', 'rewinds', 'played backwards',
   'morphs into', 'transforms into', 'melts into', 'dissolves into',
   'teleports', 'levitates', 'defies gravity', 'impossibly fast',
-  'warps', 'glitches', 'explodes into', 'shatters into',
+  'warps', 'glitches',
+  // "explodes into" / "shatters into" were removed 2 Sep 2026: documented
+  // eruptions, bursts and collapses ARE the story on this channel.
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -179,6 +265,59 @@ export const IMPERFECTION_CUES: readonly string[] = [
 ] as const;
 
 /**
+ * Physical atmosphere and light facts a beat may name instead of (or with)
+ * wear. Added when the imperfection lexicon turned every frame into decay:
+ * rain, ash and backlight are photographic facts, not style words, and they
+ * are what makes an evidence photograph of a catastrophe look like one.
+ */
+export const ATMOSPHERE_CUES: readonly string[] = [
+  'rain', 'raining', 'downpour', 'drizzle', 'spray', 'sea spray', 'mist', 'fog', 'haze', 'ash haze',
+  'ash', 'ashfall', 'smoke', 'steam', 'dust cloud', 'dust hanging', 'dust in the air', 'airborne dust',
+  'snow', 'snowfall', 'sleet', 'hail', 'frost', 'ice fog', 'blizzard',
+  'backlit', 'backlight', 'rim light', 'rim-lit', 'sun through', 'light through', 'lamplight', 'torchlight',
+  'floodlight', 'floodlit', 'headlights', 'searchlight', 'firelight', 'lightning', 'glow of', 'glare',
+  'shaft of light', 'light shaft', 'god rays', 'silhouetted against', 'against the sky', 'low sun',
+  'storm light', 'storm clouds', 'overcast', 'heat shimmer', 'wind-driven', 'windblown', 'wind-blown',
+] as const;
+
+/**
+ * Hard content line (docs/visual-style.md §7, TikTok "Shocking and Graphic
+ * Content"): people are allowed, these are not. image.graphic_content errors
+ * on them and the Gemini retry strips them.
+ */
+export const GRAPHIC_CONTENT_TERMS: readonly string[] = [
+  'corpse', 'corpses', 'dead body', 'dead bodies', 'bodies', 'body bag', 'body bags', 'cadaver',
+  'dying', 'dead man', 'dead woman', 'dead child', 'dead children', 'the dead', 'lifeless',
+  'blood', 'bloody', 'bleeding', 'wound', 'wounds', 'wounded', 'gore', 'gory', 'mutilated',
+  'dismembered', 'charred body', 'burned body', 'burning man', 'burning woman', 'drowning',
+  'drowned', 'victim', 'victims', 'casualty', 'casualties', 'remains', 'skeleton', 'skull',
+] as const;
+
+/** Words that mean a human figure is in the frame — image.human_presence wants at least one beat. */
+export const PERSON_TERMS: readonly string[] = [
+  'person', 'people', 'man', 'woman', 'men', 'women', 'child', 'children', 'boy', 'girl',
+  'figure', 'figures', 'crowd', 'crowds', 'worker', 'workers', 'farmer', 'farmers', 'fisherman',
+  'fishermen', 'soldier', 'soldiers', 'sailor', 'sailors', 'crew', 'engineer', 'engineers',
+  'villager', 'villagers', 'resident', 'residents', 'family', 'families', 'boater', 'boaters',
+  'pilot', 'pilots', 'driver', 'drivers', 'nurse', 'doctor', 'operator', 'operators', 'passenger',
+  'passengers', 'onlooker', 'onlookers', 'bystander', 'bystanders', 'silhouette of a man',
+  'hands', 'hand', 'face', 'faces', 'shoulder', 'back of a', 'backs of',
+] as const;
+
+/**
+ * Subjects that read as paperwork rather than the event. One such beat per
+ * video is licensed (the hazard map, the logbook); the hook never is —
+ * a published reel opened on a printout on a desk and never showed the island.
+ */
+export const DOCUMENT_SUBJECT_TERMS: readonly string[] = [
+  'paper', 'papers', 'document', 'documents', 'map', 'maps', 'printout', 'printouts', 'desk',
+  'screen', 'monitor', 'laptop', 'folder', 'folders', 'file', 'files', 'newspaper', 'report',
+  'reports', 'logbook', 'ledger', 'chart', 'charts', 'diagram', 'blueprint', 'drawing', 'sheet',
+  'form', 'letter', 'telegram', 'photograph of', 'printed', 'typed', 'stamped', 'clipboard',
+  'satellite image', 'satellite frame', 'satellite printout',
+] as const;
+
+/**
  * Legal in style_prefix, an error in image_prompt / motion_prompt — the style
  * prefix is injected server-side and must stay byte-identical per video.
  */
@@ -196,9 +335,12 @@ export const STYLE_NOUNS: readonly string[] = [
 /** Direction tokens — one motivated light source with a clear direction. */
 export const LIGHT_DIRECTIONS: readonly string[] = [
   'from the left', 'from the right', 'from above', 'from below', 'from behind',
-  'directly above', 'overhead', 'side-lit', 'backlit', 'raking', 'low from the',
-  'through the window', 'through the doorway', 'from the east', 'from the west',
-  'from the north', 'from the south',
+  'directly above', 'overhead', 'side-lit', 'side lit', 'backlit', 'backlighting', 'backlight',
+  'rim light', 'rim-lit', 'raking', 'low from the', 'lit from', 'sun from', 'sunlight from',
+  'light from', 'glow from', 'through the window', 'through the doorway', 'through a gap',
+  'from the east', 'from the west', 'from the north', 'from the south',
+  'from camera left', 'from camera right', 'from frame left', 'from frame right',
+  'casting long shadows', 'casting deep shadows', 'shafts of light', 'shaft of light',
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────

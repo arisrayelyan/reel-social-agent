@@ -81,6 +81,10 @@ const CASES: RuleCase[] = [
     mutate: (s) => { s.beats[2]!.narration = 'The tank groaned all through that winter while the neighbours complained again and again to a company that had already decided the cheapest possible answer was simply to paint the whole thing brown.'; },
   },
   { rule: 'narration.rule_of_three', mutate: (s) => { s.beats[2]!.narration = 'The seams wept mud, salt, and rust for years.'; } },
+  {
+    rule: 'narration.beat_word_cap',
+    mutate: (s) => { s.beats[2]!.narration = 'The tank groaned all through that winter while the neighbours complained to a company that had already decided on cheap brown paint instead.'; },
+  },
   { rule: 'narration.adjective_stack', mutate: (s) => { s.beats[2]!.narration = 'The vast eerie harbour front stood waiting for it.'; } },
 
   // ── image prompts ──
@@ -90,7 +94,20 @@ const CASES: RuleCase[] = [
     rule: 'image.capture_override',
     mutate: (s) => { for (const i of [2, 4]) s.beats[i]!.image_prompt = `detail shot of a fixed CCTV monitoring-camera still of a rusted seam number ${i}, light from above`; },
   },
-  { rule: 'image.people', mutate: (s) => { s.beats[2]!.image_prompt = 'detail shot of a rusted seam with a man beside it, light from above'; } },
+  { rule: 'image.graphic_content', mutate: (s) => { s.beats[2]!.image_prompt = 'detail shot of a rusted seam with a corpse beside it, light from above'; } },
+  {
+    rule: 'image.human_presence',
+    mutate: (s) => eachBeat(s, (b, i) => { b.image_prompt = `${b.image_prompt.split(' of ')[0]} of a rusted seam number ${i}, light from above`; }),
+  },
+  {
+    rule: 'image.named_likeness',
+    mutate: (s) => {
+      s.beats[1]!.narration = 'Arthur Jell signed the order for the steel that winter.';
+      s.beats[1]!.image_prompt = 'medium shot of Arthur Jell at the rail below the rusted tank, low sun from the west';
+    },
+  },
+  { rule: 'image.hook_is_document', mutate: (s) => { s.beats[0]!.image_prompt = 'overhead view of a printed map on a scratched desk, lamp light from above'; } },
+  { rule: 'image.document_beats', mutate: (s) => { s.beats[2]!.image_prompt = 'detail shot of a folded and creased map, light from above'; } },
   { rule: 'image.booru_syntax', mutate: (s) => { s.beats[2]!.image_prompt = 'detail shot of a rusted seam (quality:1.4), light from above'; } },
   { rule: 'image.imperfection', mutate: (s) => { s.beats[2]!.image_prompt = 'detail shot of a clean steel seam, light from above'; } },
   { rule: 'image.light_direction', mutate: (s) => { s.beats[2]!.image_prompt = 'detail shot of a rusted and chipped steel seam'; } },
@@ -105,6 +122,7 @@ const CASES: RuleCase[] = [
   { rule: 'motion.no_camera_behavior', mutate: (s) => { s.beats[3]!.motion_prompt = 'the wet paint darkens at the split'; } },
   { rule: 'motion.locked_has_camera_move', mutate: (s) => { s.beats[2]!.motion_prompt = 'the camera orbits the weeping seam as a bead falls'; } },
   { rule: 'motion.multiple_camera_cues', mutate: (s) => { s.beats[3]!.motion_prompt = 'the camera pans left and then cranes up over the painted plate'; } },
+  { rule: 'motion.hook_locked', mutate: (s) => { s.beats[0]!.camera_locked = true; } },
   { rule: 'motion.implausible', mutate: (s) => { s.beats[2]!.motion_prompt = 'a bead falls from the seam in extreme slow motion'; } },
 
   // ── caption ──
@@ -239,5 +257,70 @@ describe('text helpers', () => {
   it('returns zero spread for identical values', () => {
     expect(stdev([5, 5, 5])).toBe(0);
     expect(stdev([2, 10])).toBeGreaterThan(3);
+  });
+});
+
+describe('people are allowed, the dead are not (2 Sep 2026)', () => {
+  it('does not flag anonymous figures or faces in an image prompt', () => {
+    const story = goodStoryFixture();
+    story.beats[3]!.image_prompt =
+      'medium shot of a woman in a shawl at a tenement window, her face lit by lamplight from the left, cracked sill';
+    const rules = validateStory(story, { promptExamples: examples() }).map((f) => f.rule);
+    expect(rules).not.toContain('image.graphic_content');
+    expect(rules).not.toContain('image.people');
+  });
+
+  it('the hook must move: a locked hook and a camera-only hook both fail', () => {
+    const cameraOnly = goodStoryFixture();
+    cameraOnly.beats[0]!.motion_prompt = 'the camera drifts slowly right across the street';
+    expect(validateStory(cameraOnly, { promptExamples: examples() }).map((f) => f.rule)).toContain('motion.hook_locked');
+  });
+
+  it('accepts an atmosphere fact in place of a wear detail', () => {
+    const story = goodStoryFixture();
+    story.beats[2]!.image_prompt = 'detail shot of a steel seam in driving rain, light from above';
+    expect(validateStory(story, { promptExamples: examples() }).filter((f) => f.rule === 'image.imperfection')).toEqual([]);
+  });
+
+  it('licenses exactly one paperwork beat', () => {
+    const story = goodStoryFixture();
+    const findings = validateStory(story, { promptExamples: examples() });
+    expect(findings.filter((f) => f.rule === 'image.document_beats')).toEqual([]);
+    expect(findings.filter((f) => f.rule === 'image.hook_is_document')).toEqual([]);
+  });
+});
+
+describe('eval regressions (Haiku, 2 Sep 2026)', () => {
+  it('counts ordinary physical motion as subject motion', () => {
+    const story = goodStoryFixture();
+    story.beats[0]!.motion_prompt = 'runners stagger forward through the dust, camera tracks alongside';
+    story.beats[2]!.motion_prompt = 'condensation drips from the concrete and pools in the floor cracks';
+    const rules = validateStory(story, { promptExamples: examples() }).map((f) => f.rule);
+    expect(rules).not.toContain('motion.hook_locked');
+    expect(rules).not.toContain('story.subject_motion_count');
+  });
+
+  it('accepts "point of view shot" as the pov framing', () => {
+    const story = goodStoryFixture();
+    story.beats[3]!.image_prompt = 'point of view shot ground-level on a cracked street, low sun from the west';
+    expect(validateStory(story, { promptExamples: examples() }).filter((f) => f.rule === 'image.shot_type_prefix')).toEqual([]);
+  });
+
+  it('recognises a bare "slow pan across" as camera behaviour', () => {
+    const story = goodStoryFixture();
+    story.beats[3]!.motion_prompt = 'slow pan across the industrial site as steam swells from the vents';
+    expect(validateStory(story, { promptExamples: examples() }).filter((f) => f.rule === 'motion.no_camera_behavior')).toEqual([]);
+  });
+
+  it('a repeated subject verb warns, a repeated camera move errors', () => {
+    const subject = goodStoryFixture();
+    subject.beats[3]!.motion_prompt = 'the lens racks focus as steam lifts off the wet paint';
+    const s = validateStory(subject, { promptExamples: examples() }).filter((f) => f.rule === 'story.motion_verb_reuse');
+    expect(s.map((f) => f.severity)).toEqual(['warning']);
+
+    const camera = goodStoryFixture();
+    camera.beats[3]!.motion_prompt = 'the camera pushes in on the wet paint';
+    const c = validateStory(camera, { promptExamples: examples() }).filter((f) => f.rule === 'story.motion_verb_reuse');
+    expect(c.map((f) => f.severity)).toEqual(['error']);
   });
 });

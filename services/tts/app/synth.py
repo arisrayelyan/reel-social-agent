@@ -3,7 +3,8 @@
 The model is loaded once per process (cold load ~90s on Apple Silicon) and the
 speaker conditionals are computed once, so every beat of every video shares
 one narrator voice. `torch.manual_seed(seed + i)` per chunk keeps takes
-reproducible (docs/pipeline-learnings.md §8).
+reproducible (docs/pipeline-learnings.md §8). Pace (sentence gaps + stretch)
+is applied after generation — see pace.py for why.
 """
 from __future__ import annotations
 
@@ -20,8 +21,10 @@ import torch  # noqa: E402
 import torchaudio as ta  # noqa: E402
 
 from .config import Settings  # noqa: E402
+from .pace import measured_wpm, speech_bounds, stretch_audio, stretch_factor  # noqa: E402
 
 import re  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
 
 _TAG_RE = re.compile(r"\[[^\]]{1,40}\]")
 # punctuation that Chatterbox's punc_norm accepts as a sentence ender but that
@@ -48,6 +51,53 @@ def prepare_text(text: str, model_name: str) -> str:
     if stripped and stripped[-1] not in ".!?":
         stripped += "."
     return stripped
+
+
+# Silence between two chunks of ONE sentence (a sentence split for length).
+INTRA_SENTENCE_GAP_S = 0.20
+# A fragment shorter than this is folded into the previous sentence rather
+# than generated alone — two-character "chunks" generate garbage.
+MIN_SENTENCE_CHARS = 8
+
+
+def sentence_units(text: str, max_chars: int = speak.DEFAULT_MAX_CHARS) -> list[tuple[str, bool]]:
+    """(chunk, ends_sentence) pairs: one generation per sentence, so real
+    silence can be inserted between sentences.
+
+    Chatterbox's punc_norm collapses every pause mark (…, ;, :) to a comma, so
+    a sentence boundary is the only pause the text can carry — and only if each
+    sentence is generated on its own (docs/pipeline-learnings.md §8: "blank
+    line is the only pacing tool"). An over-long sentence is still split for
+    the model's window; those pieces get the short intra-sentence gap.
+    """
+    paragraph = " ".join(text.split())
+    if not paragraph:
+        return []
+    sentences: list[str] = []
+    for sentence in speak.split_sentences(paragraph):
+        if sentences and len(sentence) < MIN_SENTENCE_CHARS:
+            sentences[-1] = f"{sentences[-1]} {sentence}"
+        else:
+            sentences.append(sentence)
+    units: list[tuple[str, bool]] = []
+    for sentence in sentences:
+        pieces = speak.split_long_sentence(sentence, max_chars)
+        for i, piece in enumerate(pieces):
+            units.append((piece, i == len(pieces) - 1))
+    return units
+
+
+@dataclass(frozen=True)
+class Synthesis:
+    duration_seconds: float
+    audio: torch.Tensor
+    sample_rate: int
+    word_count: int
+    # pace, as delivered: the model's native wpm over the speech span,
+    # the atempo factor applied, and the wpm the listener actually hears
+    measured_wpm: float
+    stretch_factor: float
+    delivery_wpm: float
 
 
 class Synthesizer:
@@ -82,30 +132,69 @@ class Synthesizer:
             kwargs["language_id"] = "en"
         return kwargs
 
-    def synthesize(self, text: str, out_path: str, seed: int | None = None) -> tuple[float, torch.Tensor, int]:
-        """Renders `text` to `out_path` (wav). Returns (duration_s, audio, sr)."""
+    def synthesize(
+        self,
+        text: str,
+        out_path: str,
+        seed: int | None = None,
+        sentence_gap_s: float | None = None,
+        target_wpm: float | None = None,
+    ) -> Synthesis:
+        """Renders `text` to `out_path` (wav) at the requested delivery pace.
+
+        Pipeline: prepare text → one generation per sentence → join with
+        `sentence_gap_s` of silence → measure wpm over the speech span →
+        pitch-preserving stretch down to `target_wpm` (never below 0.8x).
+        Callers align words on the RETURNED audio, which is post-stretch.
+        """
         cleaned = prepare_text(text, self.settings.model)
         if not cleaned:
             raise ValueError("No text to speak after cleanup")
-        chunks = speak.chunk_transcript(cleaned, speak.DEFAULT_MAX_CHARS)
+        gap_s = self.settings.sentence_gap_s if sentence_gap_s is None else sentence_gap_s
+        target = self.settings.target_wpm if target_wpm is None else target_wpm
+
+        # gap 0 keeps the historical one-chunk-per-beat behaviour for A/B
+        units = (
+            sentence_units(cleaned)
+            if gap_s > 0
+            else [(chunk, True) for chunk, _ in speak.chunk_transcript(cleaned, speak.DEFAULT_MAX_CHARS)]
+        )
+        if not units:
+            raise ValueError("No text to speak after cleanup")
 
         effective_seed = seed if seed is not None else self.settings.seed
         sr = self.model.sr
-        gap = torch.zeros(1, int(sr * 0.20))
+        sentence_gap = torch.zeros(1, int(sr * gap_s))
+        intra_gap = torch.zeros(1, int(sr * INTRA_SENTENCE_GAP_S))
         kwargs = self._generation_kwargs()
 
         with self._lock:
             pieces: list[torch.Tensor] = []
-            for i, (chunk, _ends_para) in enumerate(chunks, 1):
+            for i, (chunk, ends_sentence) in enumerate(units, 1):
                 torch.manual_seed(effective_seed + i)
                 wav = self.model.generate(chunk, **kwargs)
                 pieces.append(wav)
-                if i < len(chunks):
-                    pieces.append(gap)
+                if i < len(units):
+                    pieces.append(sentence_gap if ends_sentence else intra_gap)
             audio = torch.cat(pieces, dim=-1)
+
+        word_count = len(cleaned.split())
+        start, end = speech_bounds(audio, sr)
+        native_wpm = measured_wpm(word_count, end - start)
+        factor = stretch_factor(native_wpm, target)
+        if factor < 1.0:
+            audio = stretch_audio(audio, sr, factor)
 
         path = Path(out_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         ta.save(str(path), audio.cpu(), sr)
         duration = audio.shape[-1] / sr
-        return duration, audio.cpu(), sr
+        return Synthesis(
+            duration_seconds=duration,
+            audio=audio.cpu(),
+            sample_rate=sr,
+            word_count=word_count,
+            measured_wpm=native_wpm,
+            stretch_factor=factor,
+            delivery_wpm=round(native_wpm * factor, 1),
+        )

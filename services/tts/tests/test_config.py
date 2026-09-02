@@ -9,6 +9,9 @@ def test_defaults_match_house_preset():
     assert s.exaggeration == 0.35
     assert s.device == "auto"
     assert s.voice_ref is None
+    # pace: 152 = slightly brisker than the 145 planning rate (Aram's call)
+    assert s.target_wpm == 152
+    assert s.sentence_gap_s == 0.35
 
 
 def test_env_overrides():
@@ -21,3 +24,9 @@ def test_env_overrides():
 
 def test_empty_voice_ref_is_none():
     assert load_settings(env={"TTS_VOICE_REF": ""}).voice_ref is None
+
+
+def test_pace_overrides():
+    s = load_settings(env={"TTS_TARGET_WPM": "0", "TTS_SENTENCE_GAP_SECONDS": "0.5"})
+    assert s.target_wpm == 0  # 0 = stretch disabled
+    assert s.sentence_gap_s == 0.5

@@ -91,11 +91,11 @@ Required negatives, learned the hard way:
 | Line | Prevents |
 |---|---|
 | `No cuts.` | Model inserting its own scene cuts |
-| `No people, no animals.` | Populating empty frames |
-| `No hands enter frame.` | Hands pointing at maps/documents |
-| `Faces never visible.` | Figures turning toward camera; generated faces at distance look wrong |
+| `No one turns to face the camera, no speech, no lip movement.` | The ugly AI failure: a figure swinging to the lens and mouthing nothing |
 | `Absolutely no camera movement, tripod locked.` | Drift on intended-static shots |
 | `Use only this image, ignore all other references.` | Bleed from other images in the tray |
+
+**Retired 2 Sep 2026:** `No people, no animals. No hands enter frame. Faces never visible.` Those lines were the Lake Nyos corpse-safety note generalised into a channel-wide ban, and with `no people` in the style prefix they made every reel a still-life (a published reel showed paper on a desk in four of seven beats and never showed the event). People are in frame now — see docs/visual-style.md §7 for what stays banned.
 
 **Mix 2 to 3 locked-camera shots among moving ones.** That is what stops the video reading as a drifting AI slideshow.
 
@@ -108,9 +108,11 @@ Dreamina UI settings, per generation:
 
 ## 6. Content-safety framing
 
-Never prompt for bodies, corpses, dead victims. Refused or unusable output.
+Never prompt for bodies, corpses, the dying, injuries or blood. Refused or unusable output from Gemini, and TikTok removes "dead bodies" and "the moment of someone's death" regardless of the AIGC label. `image.graphic_content` (error) enforces the word list in `GRAPHIC_CONTENT_TERMS`.
 
-**Shoot the absence instead:** empty doorway at dawn, cold fire pit, bicycle on its side, cattle in long grass shot wide and distant with no detail. Same emotional hit, zero policy friction. Keep the camera far — pushing in produces something unpostable.
+**For a death beat, shoot the absence:** empty doorway at dawn, cold fire pit, bicycle on its side, boots by the bed. Same emotional hit, zero policy friction.
+
+**For every other beat, put people in.** Anonymous, period-accurate figures — a farmer's back turned to the paddies, hands on a rail, a face lit by the glow — are allowed and wanted (`image.human_presence` warns when no beat has one). Two hard lines remain: never the face of a real named individual (TikTok bans real likenesses; `image.named_likeness` warns when a name from the narration lands in an image prompt), and never children in danger. Every reel carries the on-screen `AI RECONSTRUCTION` tag and must be posted with TikTok's AI-generated label — realistic AIGC of a crisis event is the exact case the platform polices.
 
 ## 7. Archival footage beats generation
 
@@ -129,9 +131,10 @@ Use for continuity-free shots (present-day, documents, equipment). Free and stro
 --model standard --cfg 0.3 --exaggeration 0.35 --para-gap 0.6 --seed 42
 ```
 
-- `--cfg 0.3` → slower, deliberate, toward 137 to 145 wpm
+- `--cfg 0.3` → slower and more deliberate than 0.5, **but not 137–145 wpm.** Measured on the first three published reels (2 Sep 2026, ffprobe over the beat wavs): 182, 192 and 194 wpm at cfg 0.3 / exaggeration 0.35. The claim above was wrong for this voice; Chatterbox has no rate parameter at all.
+- **Pace is therefore produced after synthesis** (`services/tts/app/pace.py`): one generation per sentence with `TTS_SENTENCE_GAP_SECONDS` (0.35s) of silence between them, then the take is measured over its speech span and time-stretched with ffmpeg `atempo` (pitch preserved, floor 0.8x) down to `TTS_TARGET_WPM` (152 — a touch brisker than the 145 planning rate after listening; estimates run ~5% long). Forced alignment runs on the stretched audio. Verify for free with `pnpm tts:calibrate`. The pace parameters travel on the `/synthesize` request and sit inside the api's audio content hash, so changing them re-synthesizes instead of reusing old wavs.
 - `--exaggeration 0.35` → flat and factual; 0.7+ dramatic and unstable
-- `--para-gap 0.6` → real silence at blank lines. On `standard`, `...` collapses to a comma and gives no pause. **Blank line is the only pacing tool.**
+- `--para-gap 0.6` → real silence at blank lines. On `standard`, `...` collapses to a comma and gives no pause. Blank line (now: sentence boundary, in the service) is the only pacing tool the text has.
 - `--seed 42` on every file → same narrator across all beats. Without it, timbre drifts audibly when clips sit end to end.
 
 **One file per beat, never one long block.** Re-roll 17 seconds instead of 80, and retime individual beats against picture.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CaptionCue } from '../src/clients/captions.js';
 import { goodStoryFixture } from './helpers.js';
-import { HOOK_END_SECONDS, beatSpans, buildOverlay } from '../src/utils/overlay.js';
+import { HOOK_END_SECONDS, RECONSTRUCTION_NOTICE, beatSpans, buildOverlay } from '../src/utils/overlay.js';
 
 /** One cue per beat, in beat order — exactly what merge.ts emits. */
 function cuesFor(count: number, per = 8): CaptionCue[] {
@@ -58,6 +58,22 @@ describe('buildOverlay', () => {
     for (const stamp of overlay.stamps) {
       expect(stamp.start).toBeGreaterThanOrEqual(HOOK_END_SECONDS);
     }
+  });
+
+  it('rides the AI RECONSTRUCTION notice on the first stamp', () => {
+    expect(overlay.notice).toEqual({ ...overlay.stamps[0], text: RECONSTRUCTION_NOTICE });
+  });
+
+  it('still shows the notice on the setup beat when there is no stamp', () => {
+    const unstamped = goodStoryFixture();
+    delete unstamped.evidence_stamp;
+    const built = buildOverlay(unstamped, cues, 80);
+    expect(built.notice?.text).toBe(RECONSTRUCTION_NOTICE);
+    expect(built.notice!.start).toBeGreaterThanOrEqual(HOOK_END_SECONDS);
+  });
+
+  it('omits the notice when the tag is disabled', () => {
+    expect(buildOverlay(story, cues, 80, { reconstructionTag: false }).notice).toBeNull();
   });
 
   it('emits no stamps when the story has no evidence_stamp', () => {

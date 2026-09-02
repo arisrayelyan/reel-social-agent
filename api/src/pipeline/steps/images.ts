@@ -90,9 +90,12 @@ export async function runImagesStep(app: FastifyInstance, videoId: number, story
       provider: 'nano-banana',
       model: result.model,
       prompt,
-      output: usedFallback
-        ? { style_prefix_source: 'default', reason: 'story style_prefix did not fill the Evidence File skeleton' }
-        : { style_prefix_source: 'story' },
+      output: {
+        ...(usedFallback
+          ? { style_prefix_source: 'default', reason: 'story style_prefix did not fill the Evidence File skeleton' }
+          : { style_prefix_source: 'story' }),
+        ...(result.softened ? { softened_retry: true } : {}),
+      },
       costUsd: result.costUsd,
       durationMs: Date.now() - startedAt,
     });

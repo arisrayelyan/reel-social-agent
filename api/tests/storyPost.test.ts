@@ -109,8 +109,10 @@ describe('postProcessStory normalizers', () => {
     });
     const { story } = postProcessStory(raw);
     const locked = story.beats.filter((b) => b.camera_locked).map((b) => b.index);
-    // beats 1-3 are clean candidates (0 is the hook); 4-5 ask for camera moves
-    expect(locked).toEqual([2, 3]);
+    // beats 1-2 are clean candidates: 0 is the hook and 3 the turn, which are
+    // never forced static (the cover and the money shot); 4-5 ask for moves
+    expect(locked).toEqual([1, 2]);
+    expect(story.beats[3]!.camera_locked).toBe(false);
     expect(story.beats[4]!.camera_locked).toBe(false);
     expect(story.beats[5]!.camera_locked).toBe(false);
   });
