@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { IMAGE_PROMPT_SUFFIX, MOTION_LOCKED_CAMERA, MOTION_NEGATIVES } from '@reel-agent/shared';
-import { storyFixture } from './helpers.js';
+import {
+  BEAT_GAP_SECONDS,
+  END_TAIL_SECONDS,
+  IMAGE_PROMPT_SUFFIX,
+  MOTION_LOCKED_CAMERA,
+  MOTION_NEGATIVES,
+  StorySchema,
+} from '@reel-agent/shared';
+import { goodStoryFixture, sloppyStoryFixture, storyFixture } from './helpers.js';
 import {
   buildImagePrompt,
   buildMotionPrompt,
   countWords,
+  deriveOverlayHook,
   durationForWords,
   postProcessStory,
 } from '../src/utils/storyPost.js';
@@ -81,5 +89,63 @@ describe('prompt builders', () => {
     const prompt = buildMotionPrompt('mist drifts left.', true);
     expect(prompt.endsWith(MOTION_LOCKED_CAMERA)).toBe(true);
     expect(prompt).toContain(MOTION_NEGATIVES);
+  });
+});
+
+describe('deriveOverlayHook', () => {
+  it('truncates to the on-screen maximum and drops terminal punctuation', () => {
+    expect(deriveOverlayHook('One two three four five six seven eight nine ten.')).toBe(
+      'One two three four five six seven eight',
+    );
+  });
+  it('leaves a short hook alone but strips the full stop', () => {
+    expect(deriveOverlayHook('Molasses killed twenty one people.')).toBe(
+      'Molasses killed twenty one people',
+    );
+  });
+});
+
+describe('overlay_hook back-compat', () => {
+  // The regression that would actually break production: worker.ts hard-parses
+  // every historical videos.story row on every render.
+  it('a story with no overlay_hook, evidence_stamp or exhibit_tag still parses', () => {
+    const legacy = storyFixture();
+    delete legacy.overlay_hook;
+    delete legacy.evidence_stamp;
+    expect(() => StorySchema.parse(legacy)).not.toThrow();
+  });
+
+  it('derives an overlay_hook and says so when the model omitted one', () => {
+    const { story, findings } = postProcessStory(storyFixture());
+    expect(story.overlay_hook).toBeTruthy();
+    expect(findings.some((f) => f.rule === 'overlay.derived')).toBe(true);
+  });
+
+  it('keeps a model-written overlay_hook and warns when it is too long', () => {
+    const raw = storyFixture({ overlay_hook: 'One two three four five six seven eight nine' });
+    const { story, findings } = postProcessStory(raw);
+    expect(story.overlay_hook).toBe('One two three four five six seven eight');
+    expect(findings.some((f) => f.rule === 'overlay.truncated')).toBe(true);
+  });
+});
+
+describe('findings alongside the legacy warnings array', () => {
+  it('warnings is exactly the findings details, in order', () => {
+    const { findings, warnings } = postProcessStory(storyFixture());
+    expect(warnings).toEqual(findings.map((f) => f.detail));
+    expect(findings.every((f) => f.rule && f.severity && f.field)).toBe(true);
+  });
+
+  it('includes END_TAIL_SECONDS in the duration estimate', () => {
+    // the render adds a 1.2s tail to the last beat (beatTargetSeconds), so an
+    // estimate without it measures something shorter than what ships
+    const { story, totalSeconds } = postProcessStory(goodStoryFixture());
+    const narration = story.beats.reduce((sum, b) => sum + b.duration_seconds, 0);
+    const gaps = BEAT_GAP_SECONDS * (story.beats.length - 1);
+    expect(totalSeconds).toBeCloseTo(narration + gaps + END_TAIL_SECONDS, 1);
+  });
+
+  it('never throws, however broken the story is', () => {
+    expect(() => postProcessStory(sloppyStoryFixture())).not.toThrow();
   });
 });

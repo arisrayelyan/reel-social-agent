@@ -13,7 +13,13 @@ export const RemotionRoot: React.FC = () => {
       height={1920}
       fps={FPS}
       durationInFrames={30 * FPS}
-      defaultProps={{ videoSrc: '', cues: [], durationSeconds: 30 }}
+      // never `undefined` here — Remotion rejects it in defaultProps
+      defaultProps={{
+        videoSrc: '',
+        cues: [],
+        durationSeconds: 30,
+        overlay: { hook: '', stamps: [], exhibits: [] },
+      }}
       calculateMetadata={({ props }) => ({
         durationInFrames: Math.ceil((props.durationSeconds as number) * FPS),
       })}

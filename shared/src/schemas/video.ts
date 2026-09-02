@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { PIPELINE_STEPS, PROVIDERS, VIDEO_STATUSES } from '../constants.js';
 import { StorySchema } from './story.js';
+import { StoryFindingsSchema } from './storyFindings.js';
 
 export const VideoStatusSchema = z.enum(VIDEO_STATUSES);
 export const PipelineStepSchema = z.enum(PIPELINE_STEPS);
@@ -13,11 +14,18 @@ export const VideoSchema = z.object({
   status: VideoStatusSchema,
   current_step: PipelineStepSchema.nullable(),
   story: StorySchema.nullable(),
+  /**
+   * Output of the story quality gate. Never blocks approval — the producer
+   * reads it in the story_review card and decides.
+   */
+  story_findings: StoryFindingsSchema.default([]),
   story_versions: z.array(
     z.object({
       story: StorySchema,
       change_request: z.string().nullable(),
       created_at: z.string(),
+      /** .default([]) — versions written before the gate existed lack this key. */
+      findings: StoryFindingsSchema.default([]),
     }),
   ),
   /** Set when the story was generated from a scraped web page. */
@@ -46,6 +54,25 @@ export const GenerateFromUrlBodySchema = z.object({
   provider: ProviderSchema,
 });
 
+/**
+ * Overlay-layer edits. Every field here is free to change: no step's content
+ * hash except the captions step reads them, so a change re-renders captions
+ * only — no fal, no Gemini. That is what makes hook A/B testing affordable.
+ */
+export const UpdateOverlayBodySchema = z
+  .object({
+    overlay_hook: z.string().min(3).max(80).nullish(),
+    evidence_stamp: z.string().min(4).max(48).nullish(),
+  })
+  .refine((body) => body.overlay_hook !== undefined || body.evidence_stamp !== undefined, {
+    message: 'Provide overlay_hook or evidence_stamp',
+  });
+
+/** Promote specific beats from the draft tier to the premium model. */
+export const UpgradeClipsBodySchema = z.object({
+  beat_indexes: z.array(z.number().int().min(0)).min(1).max(14),
+});
+
 export const SuggestTopicsBodySchema = z.object({
   provider: ProviderSchema,
   count: z.number().int().min(3).max(10).default(5),
@@ -58,3 +85,5 @@ export type Provider = z.infer<typeof ProviderSchema>;
 export type GenerateStoryBody = z.infer<typeof GenerateStoryBodySchema>;
 export type GenerateFromUrlBody = z.infer<typeof GenerateFromUrlBodySchema>;
 export type SuggestTopicsBody = z.infer<typeof SuggestTopicsBodySchema>;
+export type UpdateOverlayBody = z.infer<typeof UpdateOverlayBodySchema>;
+export type UpgradeClipsBody = z.infer<typeof UpgradeClipsBodySchema>;

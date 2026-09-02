@@ -62,6 +62,29 @@ export function useVideoMutations() {
     onError: (err) => toast.error(errorMessage(err)),
   });
 
+  const upgradeClips = useMutation({
+    mutationFn: (params: { id: number; beat_indexes: number[] }) =>
+      api.post(`/api/videos/${params.id}/upgrade-clips`, { beat_indexes: params.beat_indexes }),
+    onSuccess: (_data, params) => {
+      invalidate(params.id);
+      toast.success(`Re-rendering ${params.beat_indexes.length} beat(s) on the premium model`);
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const updateOverlay = useMutation({
+    mutationFn: (params: { id: number; overlay_hook?: string; evidence_stamp?: string }) => {
+      const { id, ...body } = params;
+      return api.patch(`/api/videos/${id}/overlay`, body);
+    },
+    onSuccess: (data, params) => {
+      invalidate(params.id);
+      const rerendering = (data.data as { rerendering?: boolean } | undefined)?.rerendering;
+      toast.success(rerendering ? 'Re-rendering captions with the new overlay' : 'Overlay saved');
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
   const retry = useMutation({
     mutationFn: (id: number) => api.post(`/api/videos/${id}/retry`),
     onSuccess: (_data, id) => {
@@ -87,5 +110,16 @@ export function useVideoMutations() {
     onError: (err) => toast.error(errorMessage(err)),
   });
 
-  return { generateStory, generateFromUrl, suggestTopics, approveStory, approveRender, retry, deleteVideo, selectTake };
+  return {
+    generateStory,
+    generateFromUrl,
+    suggestTopics,
+    approveStory,
+    approveRender,
+    upgradeClips,
+    updateOverlay,
+    retry,
+    deleteVideo,
+    selectTake,
+  };
 }

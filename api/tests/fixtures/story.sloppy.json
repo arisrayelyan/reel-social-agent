@@ -1,0 +1,81 @@
+{
+  "topic": "A deliberately sloppy story",
+  "hook": "In 1919, everyone in Boston believed the harbour was completely safe",
+  "overlay_hook": "1919: the tank was built too thin and untested",
+  "evidence_stamp": "boston massachusetts, nineteen nineteen",
+  "title": "Sloppy",
+  "tiktok_caption": "The tank had been built too thin and never tested, and the engineers who signed the plans had no idea what was about to happen to the whole street #wtf",
+  "style_prefix": "cinematic masterpiece photo, Tri-X grain and Kodachrome 64 slide film, no people, 16:9 landscape",
+  "beats": [
+    {
+      "role": "hook",
+      "narration": "In 1919 the valley was calm and quiet — nobody worried — [sigh] nothing seemed wrong at all",
+      "image_prompt": "wide shot of the valley below, masterpiece cinematic 35mm grain, a man walking",
+      "motion_prompt": "slow push-in across the wide shot of the valley in extreme slow motion",
+      "camera_locked": true,
+      "index": 0,
+      "word_count": 18,
+      "duration_seconds": 7.45
+    },
+    {
+      "role": "reveal",
+      "narration": "The valley kept its secret well and little did they know what happened next.",
+      "image_prompt": "wide shot of the valley below with the tank and the water",
+      "motion_prompt": "slow push-in on the tank while the camera also orbits the tank slowly",
+      "camera_locked": true,
+      "index": 1,
+      "word_count": 14,
+      "duration_seconds": 5.79
+    },
+    {
+      "role": "escalation",
+      "narration": "Engineers signed it off. Nobody had checked underneath. The vast eerie valley held mud, water, and stone in a strange silence.",
+      "image_prompt": "a valley with a tank in it and some water nearby (quality:1.4)",
+      "motion_prompt": "the tank sits there",
+      "camera_locked": true,
+      "index": 2,
+      "word_count": 21,
+      "duration_seconds": 8.69
+    },
+    {
+      "role": "turn",
+      "narration": "The valley residents complained about the tank for many long years before the day when the steel finally gave way and the whole thing came apart in a single terrible moment that nobody had prepared for at all.",
+      "image_prompt": "wide shot of the valley below with a tank and a crowd of people",
+      "motion_prompt": "the camera pushes in and cranes up and orbits around the tank and then pulls back again while everything moves at once in a long complicated continuous single take that keeps going",
+      "camera_locked": true,
+      "index": 3,
+      "word_count": 38,
+      "duration_seconds": 15.72
+    },
+    {
+      "role": "kicker",
+      "narration": "We see the valley below as it was in 1919 and the story ends there.",
+      "image_prompt": "overhead view of the valley below and the broken tank",
+      "motion_prompt": "things move around a bit",
+      "camera_locked": true,
+      "index": 4,
+      "word_count": 15,
+      "duration_seconds": 6.21
+    },
+    {
+      "role": "reveal",
+      "narration": "The valley was never the same and to this day it still smells of it.",
+      "image_prompt": "overhead view of the valley below and the ruined street",
+      "motion_prompt": "slow push-in over the ruined street",
+      "camera_locked": true,
+      "index": 5,
+      "word_count": 15,
+      "duration_seconds": 6.21
+    },
+    {
+      "role": "reveal",
+      "narration": "The tank had been built too thin and it had never once been tested.",
+      "image_prompt": "wide shot of the valley below and the rusted tank",
+      "motion_prompt": "the camera drifts left and drifts right at the same time",
+      "camera_locked": true,
+      "index": 6,
+      "word_count": 14,
+      "duration_seconds": 5.79
+    }
+  ]
+}

@@ -3,12 +3,15 @@ import React from 'react';
 export function Card({
   children,
   style,
+  'data-testid': testId,
 }: {
   children: React.ReactNode;
   style?: React.CSSProperties;
+  'data-testid'?: string;
 }) {
   return (
     <div
+      data-testid={testId}
       style={{
         background: 'var(--bg-1)',
         border: '1px solid var(--line)',

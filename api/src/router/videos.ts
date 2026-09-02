@@ -1,17 +1,24 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { PipelineEventSchema, VideoIdParamSchema } from '@reel-agent/shared';
+import {
+  PipelineEventSchema,
+  UpdateOverlayBodySchema,
+  UpgradeClipsBodySchema,
+  VideoIdParamSchema,
+} from '@reel-agent/shared';
 import {
   deleteVideo,
   findAllVideos,
   findVideoById,
+  updateVideoOverlay,
   updateVideoStatus,
 } from '../database/queries/videos.js';
 import { findAssetsByVideo, selectAssetTake } from '../database/queries/assets.js';
 import { findRunsByVideo } from '../database/queries/generationRuns.js';
 import { findPublicationsByVideo } from '../database/queries/publications.js';
 import { enqueueStep, RENDER_CHAIN } from '../pipeline/queue.js';
+import { costPerSecondFor } from '../clients/falModels.js';
 import { EVENTS_CHANNEL } from '../pipeline/events.js';
 
 export async function videosRouter(app: FastifyInstance): Promise<void> {
@@ -93,6 +100,108 @@ export async function videosRouter(app: FastifyInstance): Promise<void> {
       }
       await enqueueStep(app, video.id, video.current_step);
       return { ok: true };
+    },
+  );
+
+  /**
+   * Rewrites the on-screen hook or the Evidence File stamp and re-renders the
+   * captions over the EXISTING merged video.
+   *
+   * Costs nothing: no other step's content hash reads these fields, so tts,
+   * images, clips and merge all skip on their existing hashes and only the
+   * captions hash changes. The previous take is kept as final_v1.
+   */
+  r.patch(
+    '/videos/:id/overlay',
+    { schema: { params: VideoIdParamSchema, body: UpdateOverlayBodySchema } },
+    async (request, reply) => {
+      const video = await findVideoById(app, request.params.id);
+      if (!video) return reply.code(404).send({ error: 'Video not found' });
+      if (!video.story) return reply.code(409).send({ error: 'This video has no story yet' });
+
+      const updated = await updateVideoOverlay(app, video.id, request.body);
+      if (!updated) return reply.code(404).send({ error: 'Video not found' });
+
+      // Only re-render when there is something to render over. Before that,
+      // the next render picks the new values up on its own.
+      if (video.status === 'render_review') {
+        await updateVideoStatus(app, video.id, 'rendering', 'captions');
+        await enqueueStep(app, video.id, 'captions');
+        return { video: updated, rerendering: true };
+      }
+      return { video: updated, rerendering: false };
+    },
+  );
+
+  /**
+   * Re-renders the named beats on the premium model.
+   *
+   * The clip content hash already includes model and resolution, so a tier
+   * switch misses the existing hash, writes a new take, and the whole
+   * downstream cascade (merge → captions → render_review) re-runs on its own.
+   * The draft take is never destroyed.
+   */
+  r.post(
+    '/videos/:id/upgrade-clips',
+    { schema: { params: VideoIdParamSchema, body: UpgradeClipsBodySchema } },
+    async (request, reply) => {
+      const video = await findVideoById(app, request.params.id);
+      if (!video) return reply.code(404).send({ error: 'Video not found' });
+      if (video.status !== 'render_review') {
+        return reply.code(409).send({ error: `Cannot upgrade clips from status "${video.status}"` });
+      }
+      if (!app.config.falVideoModelDraft) {
+        return reply.code(409).send({
+          error: 'Tiering is off — set FAL_VIDEO_MODEL_DRAFT to render drafts cheaply first',
+        });
+      }
+
+      const beatCount = video.story?.beats.length ?? 0;
+      const invalid = request.body.beat_indexes.filter((i) => i >= beatCount);
+      if (invalid.length > 0) {
+        return reply.code(400).send({ error: `No such beat: ${invalid.join(', ')}` });
+      }
+
+      await updateVideoStatus(app, video.id, 'rendering', 'clips');
+      await enqueueStep(app, video.id, 'clips', {
+        tier: 'premium',
+        beatIndexes: request.body.beat_indexes,
+      });
+      return { ok: true, upgrading: request.body.beat_indexes.length };
+    },
+  );
+
+  /**
+   * What a premium re-render of these beats would cost, from the recorded clip
+   * durations — so the producer sees the number before spending it.
+   */
+  r.get(
+    '/videos/:id/upgrade-estimate',
+    { schema: { params: VideoIdParamSchema } },
+    async (request, reply) => {
+      const video = await findVideoById(app, request.params.id);
+      if (!video) return reply.code(404).send({ error: 'Video not found' });
+
+      const clips = (await findAssetsByVideo(app, video.id)).filter(
+        (asset) => asset.kind === 'clip' && asset.selected,
+      );
+      const perSecond = costPerSecondFor(
+        app.config.falVideoModel,
+        app.config.falCostPerSecondUsdMap,
+        app.config.falCostPerSecondUsd,
+      );
+      const beats = clips.map((clip) => ({
+        beat_index: clip.beat_index ?? 0,
+        seconds: Number(clip.duration_seconds ?? 0),
+        cost_usd: Number((Number(clip.duration_seconds ?? 0) * perSecond).toFixed(4)),
+      }));
+      return {
+        premium_model: app.config.falVideoModel,
+        draft_model: app.config.falVideoModelDraft || null,
+        per_second_usd: perSecond,
+        beats,
+        total_usd: Number(beats.reduce((sum, b) => sum + b.cost_usd, 0).toFixed(4)),
+      };
     },
   );
 

@@ -6,6 +6,7 @@ import {
   LlmStorySchema,
   SuggestTopicsBodySchema,
   TopicIdeasSchema,
+  summarizeFindings,
   type Provider,
 } from '@reel-agent/shared';
 import { extractLinkedUrls, FirecrawlClient } from '../clients/firecrawl.js';
@@ -15,6 +16,7 @@ import {
   buildChangeRequestPrompt,
   buildStoryPrompt,
   buildTopicPrompt,
+  storyPromptExamples,
   storySystem,
   topicsSystem,
 } from '../llm/prompts.js';
@@ -40,6 +42,33 @@ const SUGGESTION_SIMILARITY_THRESHOLD = 0.82;
 const MAIN_PAGE_MAX_CHARS = 12_000;
 const LINKED_PAGE_MAX_CHARS = 4_000;
 
+/** One generation_runs row per attempt — the retry rate is a prompt-health metric. */
+async function recordScriptRun(
+  app: FastifyInstance,
+  opts: { videoId: number; providerName: Provider; runPrompt: string },
+  outcome: { result: { model: string; inputTokens: number | null; outputTokens: number | null; costUsd: number }; processed: { findings: unknown[]; totalWords: number; totalSeconds: number } },
+  startedAt: number,
+  attemptNumber: number,
+): Promise<void> {
+  await insertGenerationRun(app, {
+    videoId: opts.videoId,
+    step: 'script',
+    provider: opts.providerName,
+    model: outcome.result.model,
+    prompt: opts.runPrompt,
+    output: {
+      attempt: attemptNumber,
+      findings: outcome.processed.findings,
+      total_words: outcome.processed.totalWords,
+      total_seconds: outcome.processed.totalSeconds,
+    },
+    inputTokens: outcome.result.inputTokens,
+    outputTokens: outcome.result.outputTokens,
+    costUsd: outcome.result.costUsd,
+    durationMs: Date.now() - startedAt,
+  });
+}
+
 /**
  * Runs script generation in the background so the HTTP request returns
  * instantly — the frontend redirects to the video page, which shows the
@@ -50,6 +79,7 @@ function runStoryGeneration(
   app: FastifyInstance,
   opts: {
     videoId: number;
+    topic: string;
     providerName: Provider;
     provider: LlmProvider;
     prompt: string;
@@ -66,31 +96,62 @@ function runStoryGeneration(
       message: `Writing script with ${opts.providerName}`,
     });
     try {
-      const result = await generateJsonWithRetry(opts.provider, {
-        system: storySystem(app.config.promptsDir),
-        prompt: opts.prompt,
-        schema: LlmStorySchema,
-      });
-      const processed = postProcessStory(result.data);
-      await insertGenerationRun(app, {
-        videoId: opts.videoId,
-        step: 'script',
-        provider: opts.providerName,
-        model: result.model,
-        prompt: opts.runPrompt,
-        output: processed.warnings.length ? { warnings: processed.warnings } : null,
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
-        costUsd: result.costUsd,
-        durationMs: Date.now() - startedAt,
-      });
-      await addVideoCost(app, opts.videoId, result.costUsd);
-      await updateVideoStory(app, opts.videoId, processed.story, opts.changeRequest);
+      const promptExamples = storyPromptExamples(app.config.promptsDir, opts.topic);
+      const system = storySystem(app.config.promptsDir);
+
+      const attempt = async (prompt: string) => {
+        const result = await generateJsonWithRetry(opts.provider, {
+          system,
+          prompt,
+          schema: LlmStorySchema,
+        });
+        return { result, processed: postProcessStory(result.data, { promptExamples }) };
+      };
+
+      let best = await attempt(opts.prompt);
+      let totalCost = best.result.costUsd;
+      await recordScriptRun(app, opts, best, startedAt, 1);
+
+      // ONE craft retry. Deliberately separate from generateJsonWithRetry,
+      // which retries SCHEMA failures — a craft rule routed through that path
+      // would fail twice and mark the video failed. Free on Ollama, one extra
+      // CLI call otherwise. Both attempts stay in generation_runs so the retry
+      // rate is itself a visible measure of prompt health.
+      const errorsIn = (v: typeof best) => v.processed.findings.filter((f) => f.severity === 'error');
+      if (errorsIn(best).length > 0) {
+        const violations = errorsIn(best)
+          .map((f) => `- ${f.beat_index === null ? 'story' : `beat ${f.beat_index}`}: ${f.detail}`)
+          .join('\n');
+        await publishEvent(app, {
+          video_id: opts.videoId,
+          step: 'script',
+          status: 'progress',
+          message: `Rewriting: ${errorsIn(best).length} hard rule violations`,
+        });
+        const retryStartedAt = Date.now();
+        const retried = await attempt(
+          `${opts.prompt}\n\nYour previous draft broke these hard rules. Rewrite the FULL story fixing every one of them, and keep everything else that already worked:\n${violations}`,
+        );
+        totalCost += retried.result.costUsd;
+        await recordScriptRun(app, opts, retried, retryStartedAt, 2);
+        if (errorsIn(retried).length < errorsIn(best).length) best = retried;
+      }
+
+      await addVideoCost(app, opts.videoId, totalCost);
+      await updateVideoStory(
+        app,
+        opts.videoId,
+        best.processed.story,
+        opts.changeRequest,
+        best.processed.findings,
+      );
       await publishEvent(app, {
         video_id: opts.videoId,
         step: 'script',
         status: 'completed',
-        message: processed.warnings.join('; ') || undefined,
+        // summarize, don't join: a sloppy story now yields ~20 findings and
+        // joining them ships a paragraph into a 12px mono status strip
+        message: summarizeFindings(best.processed.findings),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -188,6 +249,7 @@ function runUrlStoryGeneration(
       });
       runStoryGeneration(app, {
         videoId: opts.videoId,
+        topic: main.title,
         providerName: opts.providerName,
         provider: opts.provider,
         prompt: buildStoryPrompt(app.config.promptsDir, main.title, sourceMaterial),
@@ -230,6 +292,7 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
         await updateVideoStatus(app, video.id, 'draft', 'script');
         runStoryGeneration(app, {
           videoId: video.id,
+          topic: video.topic,
           providerName,
           provider,
           prompt: buildChangeRequestPrompt(
@@ -265,6 +328,7 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
       const video = await createDraftVideo(app, { topic, embedding });
       runStoryGeneration(app, {
         videoId: video.id,
+        topic,
         providerName,
         provider,
         prompt: buildStoryPrompt(app.config.promptsDir, topic),

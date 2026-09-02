@@ -118,3 +118,111 @@ describe('GET /api/stats', () => {
     expect(body.by_status.story_review).toBe(1);
   });
 });
+
+describe('PATCH /api/videos/:id/overlay', () => {
+  it('rewrites the overlay hook without touching the narration or version history', async () => {
+    const video = await seedVideo();
+    const before = await findVideoById(app, video.id);
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/videos/${video.id}/overlay`,
+      payload: { overlay_hook: 'The tank was painted brown' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const after = await findVideoById(app, video.id);
+    expect(after!.story!.overlay_hook).toBe('The tank was painted brown');
+    // the script itself must survive: a hook rewrite that regenerates the
+    // narration destroys the same-content comparison it exists for
+    expect(after!.story!.beats).toEqual(before!.story!.beats);
+    expect(after!.story_versions).toEqual(before!.story_versions);
+  });
+
+  it('re-renders captions when there is already a merged video to caption', async () => {
+    const video = await seedVideo();
+    await updateVideoStatus(app, video.id, 'render_review', null);
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/videos/${video.id}/overlay`,
+      payload: { evidence_stamp: 'BOSTON, MASSACHUSETTS — JANUARY 1919' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { rerendering: boolean }).rerendering).toBe(true);
+    const jobs = await app.pipelineQueue!.getJobs(['waiting', 'active', 'delayed']);
+    expect(jobs.map((j) => j.data.step)).toContain('captions');
+  });
+
+  it('saves without re-rendering before the first render', async () => {
+    const video = await seedVideo();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/videos/${video.id}/overlay`,
+      payload: { overlay_hook: 'Painted brown, still leaking' },
+    });
+    expect((res.json() as { rerendering: boolean }).rerendering).toBe(false);
+  });
+
+  it('rejects an empty patch and an unknown video', async () => {
+    const video = await seedVideo();
+    expect(
+      (await app.inject({ method: 'PATCH', url: `/api/videos/${video.id}/overlay`, payload: {} }))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: '/api/videos/999999/overlay',
+          payload: { overlay_hook: 'nope at all' },
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
+});
+
+describe('POST /api/videos/:id/upgrade-clips', () => {
+  it('refuses outside render_review', async () => {
+    const video = await seedVideo();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/videos/${video.id}/upgrade-clips`,
+      payload: { beat_indexes: [0] },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('refuses when tiering is off — there is no draft to upgrade from', async () => {
+    const video = await seedVideo();
+    await updateVideoStatus(app, video.id, 'render_review', null);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/videos/${video.id}/upgrade-clips`,
+      payload: { beat_indexes: [0] },
+    });
+    expect(res.statusCode).toBe(409);
+    expect((res.json() as { error: string }).error).toMatch(/FAL_VIDEO_MODEL_DRAFT/);
+  });
+
+  it('estimates a premium re-render from the recorded clip durations', async () => {
+    const video = await seedVideo();
+    await insertAsset(app, {
+      videoId: video.id,
+      beatIndex: 0,
+      kind: 'clip',
+      take: 1,
+      contentHash: 'tier-estimate-hash',
+      filePath: '1/02_clips/beat_00_v1.mp4',
+      durationSeconds: 6,
+      costUsd: 0.24,
+    });
+    const res = await app.inject({ method: 'GET', url: `/api/videos/${video.id}/upgrade-estimate` });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { total_usd: number; beats: Array<{ seconds: number }> };
+    expect(body.beats).toHaveLength(1);
+    expect(body.beats[0]!.seconds).toBe(6);
+    expect(body.total_usd).toBeGreaterThan(0);
+  });
+});

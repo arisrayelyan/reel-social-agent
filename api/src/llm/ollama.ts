@@ -8,12 +8,21 @@ interface OllamaChatResponse {
   eval_count?: number;
 }
 
+/**
+ * Ollama can wedge: observed 2 Sep 2026 answering nothing at all, for minutes,
+ * to a one-field request with a one-field schema. Without a deadline a wedged
+ * server hangs the story job forever, so this matches the 15-minute cap the
+ * claude and codex providers already carry.
+ */
+const DEFAULT_TIMEOUT_MS = 15 * 60_000;
+
 export class OllamaProvider implements LlmProvider {
   readonly name = 'ollama' as const;
 
   constructor(
     private readonly baseUrl: string,
     private readonly model: string,
+    private readonly timeoutMs = DEFAULT_TIMEOUT_MS,
   ) {}
 
   async generateJson<T>(opts: GenerateJsonOptions<T>): Promise<LlmResult<T>> {
@@ -31,6 +40,7 @@ export class OllamaProvider implements LlmProvider {
         format: z.toJSONSchema(opts.schema),
         options: { temperature: 0.7 },
       }),
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
     if (!res.ok) {
       throw new Error(`Ollama chat failed (${res.status}): ${await res.text()}`);

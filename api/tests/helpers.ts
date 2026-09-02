@@ -1,5 +1,8 @@
+import path from 'node:path';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
-import type { Story } from '@reel-agent/shared';
+import { StorySchema, type Story } from '@reel-agent/shared';
 import { loadConfig } from '../src/config.js';
 import { buildApp } from '../src/app.js';
 
@@ -57,4 +60,35 @@ export function storyFixture(overrides: Partial<Story> = {}): Story {
     })),
     ...overrides,
   };
+}
+
+const fixturesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
+
+/**
+ * Hand-written fixtures, parsed at load so a malformed one fails loudly here
+ * rather than mysteriously inside a rule.
+ *
+ * structuredClone per call is load-bearing: the rule-coverage table mutates
+ * the good fixture once per rule, and a shared reference would leak mutations
+ * across it.each cases.
+ */
+function loadFixture(name: string): Story {
+  return StorySchema.parse(JSON.parse(readFileSync(path.join(fixturesDir, name), 'utf8')));
+}
+
+const GOOD = loadFixture('story.good.json');
+const SLOPPY = loadFixture('story.sloppy.json');
+
+/**
+ * Realistic documentary prose that must produce ZERO findings of any severity.
+ * If the validator flags this, the rules are wrong, not the prose — that is
+ * the whole point of having it.
+ */
+export function goodStoryFixture(overrides: Partial<Story> = {}): Story {
+  return { ...structuredClone(GOOD), ...overrides };
+}
+
+/** Deliberately breaks nearly every rule at once. */
+export function sloppyStoryFixture(overrides: Partial<Story> = {}): Story {
+  return { ...structuredClone(SLOPPY), ...overrides };
 }

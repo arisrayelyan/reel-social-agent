@@ -21,7 +21,7 @@ export function startWorker(app: FastifyInstance): Worker<PipelineJobData> {
   const worker = new Worker<PipelineJobData>(
     PIPELINE_QUEUE,
     async (job) => {
-      const { videoId, step } = job.data;
+      const { videoId, step, tier, beatIndexes } = job.data;
       const video = await findVideoById(app, videoId);
       if (!video) throw new Error(`Video ${videoId} not found`);
       if (!video.story) throw new Error(`Video ${videoId} has no approved story`);
@@ -39,13 +39,13 @@ export function startWorker(app: FastifyInstance): Worker<PipelineJobData> {
           await runImagesStep(app, videoId, story);
           break;
         case 'clips':
-          await runClipsStep(app, videoId, story);
+          await runClipsStep(app, videoId, story, { tier, beatIndexes });
           break;
         case 'merge':
           await runMergeStep(app, videoId, story);
           break;
         case 'captions':
-          await runCaptionsStep(app, videoId);
+          await runCaptionsStep(app, videoId, story);
           break;
         case 'publish':
           await runPublishStep(app, videoId, story);

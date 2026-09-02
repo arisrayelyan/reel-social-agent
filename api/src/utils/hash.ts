@@ -24,3 +24,17 @@ function sortValue(value: unknown): unknown {
   }
   return value;
 }
+
+/**
+ * Deterministic 31-bit seed derived from a content hash (assets.seed is int4).
+ *
+ * fal accepts `seed` but does not echo it back, so the seed has to be ours.
+ * The DERIVED seed is deliberately not part of the hash it comes from: that
+ * way identical inputs always produce the identical seed, so a plain retry
+ * reproduces the exact take and is skipped by findAssetByHash. A deliberate
+ * reroll passes an explicit seed, which IS in the hash, producing a new take
+ * with the old one preserved.
+ */
+export function seedFromHash(hash: string): number {
+  return parseInt(hash.slice(0, 8), 16) % 2_147_483_647;
+}

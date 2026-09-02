@@ -5,9 +5,16 @@ import type { PipelineStep } from '@reel-agent/shared';
 
 export const PIPELINE_QUEUE = 'pipeline';
 
+/** Which fal tier a clips job renders on. */
+export type RenderTier = 'draft' | 'premium';
+
 export interface PipelineJobData {
   videoId: number;
   step: PipelineStep;
+  /** clips only: 'draft' unless a producer promoted specific beats. */
+  tier?: RenderTier;
+  /** clips only: re-render just these beats, leaving the rest untouched. */
+  beatIndexes?: number[];
 }
 
 /** Render chain order. TTS runs first: clip durations derive from real audio. */
@@ -40,8 +47,15 @@ export async function enqueueStep(
   app: FastifyInstance,
   videoId: number,
   step: PipelineStep,
+  extras: Pick<PipelineJobData, 'tier' | 'beatIndexes'> = {},
 ): Promise<void> {
-  await app.pipelineQueue.add(step, { videoId, step }, { jobId: `${videoId}:${step}:${Date.now()}` });
+  // jobId already carries Date.now(), so a premium re-render never collides
+  // with the draft job that produced the take it is replacing
+  await app.pipelineQueue.add(
+    step,
+    { videoId, step, ...extras },
+    { jobId: `${videoId}:${step}:${Date.now()}` },
+  );
 }
 
 export function nextRenderStep(step: PipelineStep): PipelineStep | null {

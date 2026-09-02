@@ -12,6 +12,12 @@ const CONCURRENCY = process.env.REMOTION_CONCURRENCY
   ? Number(process.env.REMOTION_CONCURRENCY)
   : null;
 
+const OverlayCueSchema = z.object({
+  text: z.string().min(1).max(64),
+  start: z.number().nonnegative(),
+  end: z.number().nonnegative(),
+});
+
 const RenderBodySchema = z.object({
   video_path: z.string().min(1),
   cues: z.array(
@@ -24,6 +30,14 @@ const RenderBodySchema = z.object({
   ),
   duration_seconds: z.number().positive(),
   out_path: z.string().min(1),
+  // nullish throughout so a caller from before the overlay layer still validates
+  overlay: z
+    .object({
+      hook: z.string().max(120).nullish(),
+      stamps: z.array(OverlayCueSchema).default([]),
+      exhibits: z.array(OverlayCueSchema).default([]),
+    })
+    .nullish(),
 });
 
 const app = Fastify({ logger: true });
@@ -38,7 +52,7 @@ app.post('/render', async (request, reply) => {
   if (!parsed.success) {
     return reply.code(400).send({ error: 'Invalid body', details: parsed.error.issues });
   }
-  const { video_path, cues, duration_seconds, out_path } = parsed.data;
+  const { video_path, cues, duration_seconds, out_path, overlay } = parsed.data;
 
   const rel = path.relative(STORAGE_DIR, video_path);
   if (rel.startsWith('..')) {
@@ -52,6 +66,11 @@ app.post('/render', async (request, reply) => {
     cues,
     durationSeconds: duration_seconds,
     outPath: out_path,
+    overlay: {
+      hook: overlay?.hook ?? null,
+      stamps: overlay?.stamps ?? [],
+      exhibits: overlay?.exhibits ?? [],
+    },
     concurrency: CONCURRENCY,
   });
   return { out_path };

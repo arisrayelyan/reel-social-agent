@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import type { CaptionCue } from './cues';
+import type { OverlayProps } from './remotion/CaptionedReel';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ENTRY = path.join(here, 'remotion', 'index.ts');
@@ -20,6 +21,8 @@ export interface RenderRequest {
   cues: CaptionCue[];
   durationSeconds: number;
   outPath: string;
+  /** The Evidence File overlay layer, scheduled by the API. */
+  overlay: OverlayProps;
   concurrency: number | null;
 }
 
@@ -29,6 +32,7 @@ export async function renderCaptionedReel(req: RenderRequest): Promise<void> {
     videoSrc: req.videoSrc,
     cues: req.cues,
     durationSeconds: req.durationSeconds,
+    overlay: req.overlay,
   };
   const composition = await selectComposition({
     serveUrl,

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseCostMap } from './clients/falModels.js';
 
 export interface AppConfig {
   port: number;
@@ -24,7 +25,30 @@ export interface AppConfig {
   geminiImageCostUsd: number;
   falKey: string;
   falVideoModel: string;
+  falVideoResolution: string;
+  /**
+   * Cheap tier for the first pass. Empty string = tiering OFF, which is the
+   * default: the plan cannot promise 480P or any given endpoint is cheaper
+   * (pricing is not in the openapi document), so this must be an opt-in.
+   */
+  falVideoModelDraft: string;
+  falVideoResolutionDraft: string;
+  /**
+   * 'balanced' (~1s) or 'quality' (~30s, richer rewrite). The endpoint REQUIRES
+   * this field and rewrites our motion prompt before generating either way —
+   * 'balanced' keeps today's behaviour, now explicit and switchable.
+   */
+  falPromptExpansionMode: string;
+  /**
+   * Generate a deterministic end frame for the kicker (one extra Gemini edit)
+   * and drive the kicker clip with first+last frame, so the reel's final frame
+   * is known and the loop point is invisible. Requires an endpoint that
+   * declares end_image_url — see falModels.ts.
+   */
+  loopableKicker: boolean;
   falCostPerSecondUsd: number;
+  /** Per-model $/s so the dashboard stays honest across tiers. */
+  falCostPerSecondUsdMap: Record<string, number>;
   firecrawlApiKey: string;
   firecrawlMaxLinkedPages: number;
   firecrawlCostPerPageUsd: number;
@@ -67,7 +91,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     claudeCliPath: env.CLAUDE_CLI_PATH ?? 'claude',
     claudeModel: env.CLAUDE_MODEL ?? 'opus',
     codexCliPath: env.CODEX_CLI_PATH ?? 'codex',
-    codexModel: env.CODEX_MODEL ?? 'gpt-5.6-sol',
+    codexModel: env.CODEX_MODEL ?? 'gpt-5.6-luna',
     codexInputCostPerMTok: Number(env.CODEX_INPUT_COST_PER_MTOK ?? 1.25),
     codexOutputCostPerMTok: Number(env.CODEX_OUTPUT_COST_PER_MTOK ?? 10),
     geminiApiKey: env.GEMINI_API_KEY ?? '',
@@ -75,7 +99,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     geminiImageCostUsd: Number(env.GEMINI_IMAGE_COST_USD ?? 0.039),
     falKey: env.FAL_KEY ?? '',
     falVideoModel: env.FAL_VIDEO_MODEL ?? 'minimax/h3-max/image-to-video',
+    falVideoResolution: env.FAL_VIDEO_RESOLUTION ?? '768P',
+    falVideoModelDraft: env.FAL_VIDEO_MODEL_DRAFT ?? '',
+    falVideoResolutionDraft: env.FAL_VIDEO_RESOLUTION_DRAFT ?? '480P',
+    falPromptExpansionMode: env.FAL_PROMPT_EXPANSION_MODE ?? 'balanced',
+    loopableKicker: (env.LOOPABLE_KICKER ?? 'true') !== 'false',
     falCostPerSecondUsd: Number(env.FAL_COST_PER_SECOND_USD ?? 0.04),
+    falCostPerSecondUsdMap: parseCostMap(env.FAL_COST_PER_SECOND_USD_MAP),
     firecrawlApiKey: env.FIRECRAWL_API_KEY ?? '',
     firecrawlMaxLinkedPages: Number(env.FIRECRAWL_MAX_LINKED_PAGES ?? 4),
     firecrawlCostPerPageUsd: Number(env.FIRECRAWL_COST_PER_PAGE_USD ?? 0.005),

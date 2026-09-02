@@ -25,3 +25,6 @@ storage/
 .DS_Store
 coverage/
 .remotion/
+
+# scratch dirs for one-off scripts
+.scratch/

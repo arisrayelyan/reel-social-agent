@@ -1,4 +1,5 @@
 import type { AppConfig } from '../config.js';
+import type { OverlayProps } from '../utils/overlay.js';
 import type { WordTiming } from './tts.js';
 
 export interface CaptionCue {
@@ -21,6 +22,7 @@ export class CaptionsClient {
     cues: CaptionCue[];
     durationSeconds: number;
     outPath: string;
+    overlay: OverlayProps;
   }): Promise<{ out_path: string }> {
     const res = await fetch(`${this.config.captionsUrl}/render`, {
       method: 'POST',
@@ -30,6 +32,7 @@ export class CaptionsClient {
         cues: params.cues,
         duration_seconds: params.durationSeconds,
         out_path: params.outPath,
+        overlay: params.overlay,
       }),
       // Remotion renders take minutes
       signal: AbortSignal.timeout(30 * 60_000),

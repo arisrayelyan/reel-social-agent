@@ -14,19 +14,31 @@ export const BEAT_GAP_SECONDS = 0.45;
  */
 export const END_TAIL_SECONDS = 1.2;
 
+/** On-screen hook overlay: max words that fit centre-frame at 88px. */
+export const OVERLAY_HOOK_MAX_WORDS = 8;
+
 /** Render target. */
 export const VIDEO = { width: 1080, height: 1920, fps: 30 } as const;
 
 /**
- * Default visual style prefix. Must be byte-identical across every shot of a
- * video — the server injects it, the LLM never writes it (pipeline-learnings §4).
- * Stored per-video so each story can override geography/era; editable in Settings.
+ * The Evidence File root style prefix (docs/visual-style.md §2) — the channel's
+ * fallback identity when a story has no usable per-story prefix of its own.
+ *
+ * Must be byte-identical across every shot of a video: the server injects it,
+ * the LLM never writes it (pipeline-learnings §4). Per-story prefixes fill the
+ * same skeleton with a capture medium chosen for the era of the EVENT — see
+ * CAPTURE_MEDIA in craft.ts. A 2023 story shot on Tri-X is a lie.
+ *
+ * The overlapping negatives from the doc's §2 text are omitted on purpose:
+ * buildImagePrompt already appends IMAGE_PROMPT_SUFFIX, and emitting
+ * "no text, no labels, no watermark" twice buys nothing.
  */
 export const DEFAULT_STYLE_PREFIX =
-  'documentary photography, muted 35mm film stock, fine grain, desaturated ' +
-  'earth tones, overcast diffuse natural light, vertical 9:16 composition, ' +
-  'cinematic, single image, no grid, no text, no labels, no collage, ' +
-  'no watermark, no people, no modern branding.';
+  "documentary evidence photograph captured in the event's own era on the era's " +
+  'own medium, period-accurate capture characteristics, one motivated light ' +
+  'source with a clear direction, honest shadows, real surface wear and ' +
+  'imperfections, truthful unstaged composition, vertical 9:16 composition, ' +
+  'cinematic, no collage, no people, no modern branding.';
 
 /** Suffix appended to every image prompt to avoid contact sheets (pipeline-learnings §4). */
 export const IMAGE_PROMPT_SUFFIX =
@@ -71,6 +83,28 @@ export const BEAT_ROLES = [
   'kicker',
 ] as const;
 
-export const ASSET_KINDS = ['keyframe', 'clip', 'audio', 'merged', 'final'] as const;
+export const ASSET_KINDS = [
+  'keyframe',
+  /** Kicker end frame, so the reel's last frame is deterministic and loopable. */
+  'endframe',
+  'clip',
+  'audio',
+  'merged',
+  'final',
+] as const;
+
+/**
+ * Edit instruction for the kicker's end frame (docs/fal-video-generation.md §5).
+ *
+ * An EDIT of the start frame, not an independent generation: same place, same
+ * light, same wear, motion at rest. A settled final frame cuts back to frame
+ * zero without a visual jerk, which is what a seamless loop needs — and the
+ * Evidence File keeps the kicker stamp-free for the same reason.
+ */
+export const LOOP_END_FRAME_EDIT_PROMPT =
+  'Keep this exact scene, camera position, framing, lighting direction and ' +
+  'surface wear. Show the same moment a few seconds later, with all motion ' +
+  'come to rest and nothing new entering the frame. Same photograph, settled. ' +
+  'Single image, no text, no labels, no watermark, no people.';
 
 export const PROVIDERS = ['ollama', 'claude-code', 'codex'] as const;

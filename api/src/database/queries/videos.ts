@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify';
-import type { PipelineStep, Story, Video, VideoStatus } from '@reel-agent/shared';
+import type { PipelineStep, Story, StoryFinding, Video, VideoStatus } from '@reel-agent/shared';
 
 type VideoRow = Video;
 
 /** All videos, newest first. */
 export async function findAllVideos(app: FastifyInstance): Promise<VideoRow[]> {
   const { rows } = await app.pg.query<VideoRow>(
-    `SELECT id, topic, hook, status, current_step, story, story_versions, source_url, source_material, error,
+    `SELECT id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, error,
             total_cost_usd, created_at, updated_at
        FROM videos ORDER BY created_at DESC`,
   );
@@ -19,7 +19,7 @@ export async function findVideoById(
   id: number,
 ): Promise<VideoRow | null> {
   const { rows } = await app.pg.query<VideoRow>(
-    `SELECT id, topic, hook, status, current_step, story, story_versions, source_url, source_material, error,
+    `SELECT id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, error,
             total_cost_usd, created_at, updated_at
        FROM videos WHERE id = $1`,
     [id],
@@ -35,7 +35,7 @@ export async function createDraftVideo(
   const { rows } = await app.pg.query<VideoRow>(
     `INSERT INTO videos (topic, status, current_step, topic_embedding, source_url)
      VALUES ($1, 'draft', 'script', $2, $3)
-     RETURNING id, topic, hook, status, current_step, story, story_versions, source_url, source_material, error,
+     RETURNING id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, error,
                total_cost_usd, created_at, updated_at`,
     [
       params.topic,
@@ -73,7 +73,7 @@ export async function createVideo(
   const { rows } = await app.pg.query<VideoRow>(
     `INSERT INTO videos (topic, hook, status, story, story_versions, topic_embedding)
      VALUES ($1, $2, 'story_review', $3, $4, $5)
-     RETURNING id, topic, hook, status, current_step, story, story_versions, source_url, source_material, error,
+     RETURNING id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, error,
                total_cost_usd, created_at, updated_at`,
     [
       params.topic,
@@ -94,29 +94,58 @@ export async function updateVideoStory(
   id: number,
   story: Story,
   changeRequest: string | null,
+  findings: StoryFinding[] = [],
 ): Promise<VideoRow | null> {
   const { rows } = await app.pg.query<VideoRow>(
     `UPDATE videos
         SET story = $2,
             hook = $3,
             topic = $5,
+            story_findings = $6::jsonb,
             status = 'story_review',
             current_step = NULL,
             error = NULL,
             story_versions = story_versions || $4::jsonb,
             updated_at = now()
       WHERE id = $1
-      RETURNING id, topic, hook, status, current_step, story, story_versions, source_url, source_material, error,
+      RETURNING id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, error,
                 total_cost_usd, created_at, updated_at`,
     [
       id,
       JSON.stringify(story),
       story.hook,
       JSON.stringify([
-        { story, change_request: changeRequest, created_at: new Date().toISOString() },
+        { story, change_request: changeRequest, created_at: new Date().toISOString(), findings },
       ]),
       story.topic,
+      JSON.stringify(findings),
     ],
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Patches the overlay-layer fields inside videos.story without touching the
+ * narration, the beats or the version history — a hook rewrite must not
+ * regenerate the script, or the "same content, different hook" comparison the
+ * cheap re-render exists for is destroyed.
+ */
+export async function updateVideoOverlay(
+  app: FastifyInstance,
+  id: number,
+  patch: { overlay_hook?: string | null; evidence_stamp?: string | null },
+): Promise<VideoRow | null> {
+  const fields: Record<string, string | null> = {};
+  if (patch.overlay_hook !== undefined) fields.overlay_hook = patch.overlay_hook;
+  if (patch.evidence_stamp !== undefined) fields.evidence_stamp = patch.evidence_stamp;
+  const { rows } = await app.pg.query<VideoRow>(
+    `UPDATE videos
+        SET story = story || $2::jsonb,
+            updated_at = now()
+      WHERE id = $1 AND story IS NOT NULL
+      RETURNING id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, error,
+                total_cost_usd, created_at, updated_at`,
+    [id, JSON.stringify(fields)],
   );
   return rows[0] ?? null;
 }

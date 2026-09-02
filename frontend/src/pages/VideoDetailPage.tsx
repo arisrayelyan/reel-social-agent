@@ -5,6 +5,8 @@ import { mediaUrl } from '@/lib/api';
 import { useVideo } from '@/hooks/useVideo';
 import { useVideoEvents } from '@/hooks/useVideoEvents';
 import { useVideoMutations } from '@/hooks/useVideoMutations';
+import { StoryFindings } from '@/components/StoryFindings';
+import { RenderReview } from '@/components/RenderReview';
 import { Button, Card, Pill, PipelineStrip, SectionLabel, StatusPill } from '@/components/design';
 
 export function VideoDetailPage() {
@@ -12,7 +14,8 @@ export function VideoDetailPage() {
   const videoId = Number(id);
   const navigate = useNavigate();
   const { data: video, isLoading } = useVideo(videoId);
-  const { generateStory, approveStory, retry, deleteVideo } = useVideoMutations();
+  const { generateStory, approveStory, approveRender, upgradeClips, retry, deleteVideo } =
+    useVideoMutations();
   const [changeRequest, setChangeRequest] = useState('');
   const [regenProvider, setRegenProvider] = useState<Provider>('ollama');
 
@@ -124,6 +127,7 @@ export function VideoDetailPage() {
               </a>
             </div>
           )}
+          <StoryFindings findings={video.story_findings} />
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
             <Button variant="go" busy={approveStory.isPending} onClick={() => approveStory.mutate(video.id)}>
               Approve story — start render
@@ -160,6 +164,20 @@ export function VideoDetailPage() {
             </span>
           </div>
         </Card>
+      )}
+
+      {/* render review — the only path from a finished cut to publishing */}
+      {video.status === 'render_review' && (
+        <RenderReview
+          videoId={video.id}
+          story={video.story}
+          approving={approveRender.isPending}
+          upgrading={upgradeClips.isPending}
+          onApprove={() => approveRender.mutate(video.id)}
+          onUpgrade={(beatIndexes) =>
+            upgradeClips.mutate({ id: video.id, beat_indexes: beatIndexes })
+          }
+        />
       )}
 
       {/* final video */}
