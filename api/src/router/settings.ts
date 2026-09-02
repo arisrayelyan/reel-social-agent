@@ -54,6 +54,7 @@ export async function settingsRouter(app: FastifyInstance): Promise<void> {
       keys: {
         GEMINI_API_KEY: Boolean(config.geminiApiKey),
         FAL_KEY: Boolean(config.falKey),
+        FIRECRAWL_API_KEY: Boolean(config.firecrawlApiKey),
         TIKTOK_CLIENT_KEY: Boolean(config.tiktokClientKey),
         TIKTOK_CLIENT_SECRET: Boolean(config.tiktokClientSecret),
         TELEGRAM_BOT_TOKEN: Boolean(config.telegramBotToken),

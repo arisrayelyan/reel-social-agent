@@ -6,7 +6,7 @@ type VideoRow = Video;
 /** All videos, newest first. */
 export async function findAllVideos(app: FastifyInstance): Promise<VideoRow[]> {
   const { rows } = await app.pg.query<VideoRow>(
-    `SELECT id, topic, hook, status, current_step, story, story_versions, error,
+    `SELECT id, topic, hook, status, current_step, story, story_versions, source_url, source_material, error,
             total_cost_usd, created_at, updated_at
        FROM videos ORDER BY created_at DESC`,
   );
@@ -19,7 +19,7 @@ export async function findVideoById(
   id: number,
 ): Promise<VideoRow | null> {
   const { rows } = await app.pg.query<VideoRow>(
-    `SELECT id, topic, hook, status, current_step, story, story_versions, error,
+    `SELECT id, topic, hook, status, current_step, story, story_versions, source_url, source_material, error,
             total_cost_usd, created_at, updated_at
        FROM videos WHERE id = $1`,
     [id],
@@ -30,16 +30,39 @@ export async function findVideoById(
 /** Creates a bare draft row immediately; the script is generated async. */
 export async function createDraftVideo(
   app: FastifyInstance,
-  params: { topic: string; embedding: number[] | null },
+  params: { topic: string; embedding: number[] | null; sourceUrl?: string },
 ): Promise<VideoRow> {
   const { rows } = await app.pg.query<VideoRow>(
-    `INSERT INTO videos (topic, status, current_step, topic_embedding)
-     VALUES ($1, 'draft', 'script', $2)
-     RETURNING id, topic, hook, status, current_step, story, story_versions, error,
+    `INSERT INTO videos (topic, status, current_step, topic_embedding, source_url)
+     VALUES ($1, 'draft', 'script', $2, $3)
+     RETURNING id, topic, hook, status, current_step, story, story_versions, source_url, source_material, error,
                total_cost_usd, created_at, updated_at`,
-    [params.topic, params.embedding ? JSON.stringify(params.embedding) : null],
+    [
+      params.topic,
+      params.embedding ? JSON.stringify(params.embedding) : null,
+      params.sourceUrl ?? null,
+    ],
   );
   return rows[0]!;
+}
+
+/** Fills in scrape results on a from-URL draft before the script is written. */
+export async function updateVideoSource(
+  app: FastifyInstance,
+  id: number,
+  params: { topic: string; embedding: number[] | null; sourceMaterial: string },
+): Promise<void> {
+  await app.pg.query(
+    `UPDATE videos
+        SET topic = $2, topic_embedding = $3, source_material = $4, updated_at = now()
+      WHERE id = $1`,
+    [
+      id,
+      params.topic,
+      params.embedding ? JSON.stringify(params.embedding) : null,
+      params.sourceMaterial,
+    ],
+  );
 }
 
 /** Creates a draft video with its first story version. */
@@ -50,7 +73,7 @@ export async function createVideo(
   const { rows } = await app.pg.query<VideoRow>(
     `INSERT INTO videos (topic, hook, status, story, story_versions, topic_embedding)
      VALUES ($1, $2, 'story_review', $3, $4, $5)
-     RETURNING id, topic, hook, status, current_step, story, story_versions, error,
+     RETURNING id, topic, hook, status, current_step, story, story_versions, source_url, source_material, error,
                total_cost_usd, created_at, updated_at`,
     [
       params.topic,
@@ -83,7 +106,7 @@ export async function updateVideoStory(
             story_versions = story_versions || $4::jsonb,
             updated_at = now()
       WHERE id = $1
-      RETURNING id, topic, hook, status, current_step, story, story_versions, error,
+      RETURNING id, topic, hook, status, current_step, story, story_versions, source_url, source_material, error,
                 total_cost_usd, created_at, updated_at`,
     [
       id,

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { GenerateStoryBody, TopicIdeas, Video } from '@reel-agent/shared';
+import type { GenerateFromUrlBody, GenerateStoryBody, TopicIdeas, Video } from '@reel-agent/shared';
 import { api } from '@/lib/api';
 
 export interface GenerateStoryResponse {
@@ -23,6 +23,15 @@ export function useVideoMutations() {
   const generateStory = useMutation({
     mutationFn: (body: GenerateStoryBody) =>
       api.post<GenerateStoryResponse>('/api/generate/story', body).then((r) => r.data),
+    onSuccess: (data) => {
+      invalidate(data.video.id);
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const generateFromUrl = useMutation({
+    mutationFn: (body: GenerateFromUrlBody) =>
+      api.post<GenerateStoryResponse>('/api/generate/from-url', body).then((r) => r.data),
     onSuccess: (data) => {
       invalidate(data.video.id);
     },
@@ -78,5 +87,5 @@ export function useVideoMutations() {
     onError: (err) => toast.error(errorMessage(err)),
   });
 
-  return { generateStory, suggestTopics, approveStory, approveRender, retry, deleteVideo, selectTake };
+  return { generateStory, generateFromUrl, suggestTopics, approveStory, approveRender, retry, deleteVideo, selectTake };
 }

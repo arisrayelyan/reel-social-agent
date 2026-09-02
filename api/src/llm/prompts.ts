@@ -47,9 +47,19 @@ export function storySystem(promptsDir: string): string {
   return loadPrompt(promptsDir, 'story.system.md');
 }
 
-export function buildStoryPrompt(promptsDir: string, topic: string): string {
+export function buildStoryPrompt(
+  promptsDir: string,
+  topic: string,
+  sourceMaterial?: string | null,
+): string {
+  const sourceBlock = sourceMaterial
+    ? `\nSOURCE MATERIAL (scraped from the web — your ONLY source of facts):\n` +
+      `Base every fact, number and name strictly on the material below. If a detail is not in it, leave it out — never fill gaps from memory.\n\n` +
+      `<source_material>\n${sourceMaterial}\n</source_material>\n`
+    : '';
   return renderTemplate(loadPrompt(promptsDir, 'story.user.md'), {
     topic,
+    source_block: sourceBlock,
     min_words: TARGET_WORD_COUNT.min,
     max_words: TARGET_WORD_COUNT.max,
     min_seconds: TARGET_DURATION_SECONDS.min,
@@ -63,9 +73,10 @@ export function buildChangeRequestPrompt(
   topic: string,
   previousStoryJson: string,
   changeRequest: string,
+  sourceMaterial?: string | null,
 ): string {
   return renderTemplate(loadPrompt(promptsDir, 'story.change-request.md'), {
-    story_prompt: buildStoryPrompt(promptsDir, topic),
+    story_prompt: buildStoryPrompt(promptsDir, topic, sourceMaterial),
     previous_story_json: previousStoryJson,
     change_request: changeRequest,
   });

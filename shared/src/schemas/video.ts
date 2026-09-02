@@ -20,6 +20,10 @@ export const VideoSchema = z.object({
       created_at: z.string(),
     }),
   ),
+  /** Set when the story was generated from a scraped web page. */
+  source_url: z.string().nullable(),
+  /** Scraped markdown the story is based on (kept for change requests). */
+  source_material: z.string().nullable(),
   error: z.string().nullable(),
   total_cost_usd: z.coerce.number(),
   created_at: z.coerce.string(),
@@ -37,6 +41,11 @@ export const GenerateStoryBodySchema = z.object({
   video_id: z.number().int().positive().optional(),
 });
 
+export const GenerateFromUrlBodySchema = z.object({
+  url: z.url({ protocol: /^https?$/ }),
+  provider: ProviderSchema,
+});
+
 export const SuggestTopicsBodySchema = z.object({
   provider: ProviderSchema,
   count: z.number().int().min(3).max(10).default(5),
@@ -47,4 +56,5 @@ export type VideoStatus = z.infer<typeof VideoStatusSchema>;
 export type PipelineStep = z.infer<typeof PipelineStepSchema>;
 export type Provider = z.infer<typeof ProviderSchema>;
 export type GenerateStoryBody = z.infer<typeof GenerateStoryBodySchema>;
+export type GenerateFromUrlBody = z.infer<typeof GenerateFromUrlBodySchema>;
 export type SuggestTopicsBody = z.infer<typeof SuggestTopicsBodySchema>;

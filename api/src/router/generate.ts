@@ -1,12 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
+  GenerateFromUrlBodySchema,
   GenerateStoryBodySchema,
   LlmStorySchema,
   SuggestTopicsBodySchema,
   TopicIdeasSchema,
   type Provider,
 } from '@reel-agent/shared';
+import { extractLinkedUrls, FirecrawlClient } from '../clients/firecrawl.js';
 import { generateJsonWithRetry, getProvider, type LlmProvider } from '../llm/index.js';
 import { embedText } from '../llm/ollama.js';
 import {
@@ -23,6 +25,7 @@ import {
   findAllVideos,
   findMostSimilarTopic,
   findVideoById,
+  updateVideoSource,
   updateVideoStatus,
   updateVideoStory,
 } from '../database/queries/videos.js';
@@ -33,6 +36,9 @@ import { publishEvent } from '../pipeline/events.js';
 const SIMILARITY_THRESHOLD = 0.9;
 /** Stricter filter for machine-suggested ideas — each generation must differ. */
 const SUGGESTION_SIMILARITY_THRESHOLD = 0.82;
+/** Scraped source material caps — keeps the story prompt inside every model's context. */
+const MAIN_PAGE_MAX_CHARS = 12_000;
+const LINKED_PAGE_MAX_CHARS = 4_000;
 
 /**
  * Runs script generation in the background so the HTTP request returns
@@ -111,6 +117,97 @@ function runStoryGeneration(
   })();
 }
 
+/**
+ * Background half of "generate from URL": scrape the page (plus the pages it
+ * mentions), dedupe on the derived topic, persist the source material, then
+ * hand off to the normal script generation. Any failure marks the video
+ * failed at the script step — same UX as an LLM failure.
+ */
+function runUrlStoryGeneration(
+  app: FastifyInstance,
+  opts: { videoId: number; url: string; providerName: Provider; provider: LlmProvider },
+): void {
+  void (async () => {
+    try {
+      await publishEvent(app, {
+        video_id: opts.videoId,
+        step: 'script',
+        status: 'started',
+        message: `Reading ${opts.url}`,
+      });
+      const firecrawl = new FirecrawlClient(app.config);
+      const startedAt = Date.now();
+      const main = await firecrawl.scrape(opts.url);
+      const linkedUrls = extractLinkedUrls(
+        main.markdown,
+        opts.url,
+        app.config.firecrawlMaxLinkedPages,
+      );
+      const linked = linkedUrls.length ? await firecrawl.scrapeMany(linkedUrls) : [];
+
+      const scrapeCost = (1 + linked.length) * app.config.firecrawlCostPerPageUsd;
+      await insertGenerationRun(app, {
+        videoId: opts.videoId,
+        step: 'research',
+        provider: opts.providerName,
+        model: 'firecrawl',
+        prompt: opts.url,
+        output: { pages: [main.url, ...linked.map((p) => p.url)] },
+        costUsd: scrapeCost,
+        durationMs: Date.now() - startedAt,
+      });
+      await addVideoCost(app, opts.videoId, scrapeCost);
+
+      const sourceMaterial = [
+        `# ${main.title}\nSource: ${main.url}\n\n${main.markdown.slice(0, MAIN_PAGE_MAX_CHARS)}`,
+        ...linked.map(
+          (p) => `\n\n---\n\n## Related: ${p.title}\nSource: ${p.url}\n\n${p.markdown.slice(0, LINKED_PAGE_MAX_CHARS)}`,
+        ),
+      ].join('');
+
+      // dedupe on the page title now that we know it (best-effort, like the topic path)
+      let embedding: number[] | null = null;
+      try {
+        embedding = await embedText(app.config.ollamaUrl, app.config.ollamaEmbedModel, main.title);
+        const similar = await findMostSimilarTopic(app, embedding);
+        if (similar && similar.id !== opts.videoId && similar.similarity > SIMILARITY_THRESHOLD) {
+          throw new Error(
+            `Too similar to existing video #${similar.id}: "${similar.topic}" (${(similar.similarity * 100).toFixed(0)}%)`,
+          );
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith('Too similar')) throw err;
+        app.log.warn({ err }, 'topic embedding unavailable — skipping dedupe');
+        embedding = null;
+      }
+
+      await updateVideoSource(app, opts.videoId, {
+        topic: main.title,
+        embedding,
+        sourceMaterial,
+      });
+      runStoryGeneration(app, {
+        videoId: opts.videoId,
+        providerName: opts.providerName,
+        provider: opts.provider,
+        prompt: buildStoryPrompt(app.config.promptsDir, main.title, sourceMaterial),
+        changeRequest: null,
+        runPrompt: opts.url,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      app.log.error({ err, videoId: opts.videoId, url: opts.url }, 'source scrape failed');
+      await updateVideoStatus(app, opts.videoId, 'failed', 'script', message.slice(0, 2000));
+      await publishEvent(app, {
+        video_id: opts.videoId,
+        step: 'script',
+        status: 'failed',
+        message: message.slice(0, 300),
+      });
+    }
+  })();
+}
+
 export async function generateRouter(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -140,6 +237,7 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
             video.topic,
             JSON.stringify(video.story),
             change_request,
+            video.source_material,
           ),
           changeRequest: change_request,
           runPrompt: change_request,
@@ -173,6 +271,29 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
         changeRequest: null,
         runPrompt: topic,
       });
+      return reply.code(202).send({ video });
+    },
+  );
+
+  /**
+   * Generates a story from a web page: returns the draft video immediately,
+   * then scrapes the URL (and the pages it mentions) with Firecrawl in the
+   * background and writes the script from that material only.
+   */
+  r.post(
+    '/generate/from-url',
+    { schema: { body: GenerateFromUrlBodySchema } },
+    async (request, reply) => {
+      const { url, provider: providerName } = request.body;
+      const provider = getProvider(app.config, providerName);
+      if (!app.config.firecrawlApiKey) {
+        return reply.code(400).send({
+          error: 'FIRECRAWL_API_KEY is not set (api/.env) — get one at https://www.firecrawl.dev',
+        });
+      }
+
+      const video = await createDraftVideo(app, { topic: url, embedding: null, sourceUrl: url });
+      runUrlStoryGeneration(app, { videoId: video.id, url, providerName, provider });
       return reply.code(202).send({ video });
     },
   );

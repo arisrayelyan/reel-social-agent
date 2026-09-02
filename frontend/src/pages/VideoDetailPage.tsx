@@ -66,12 +66,26 @@ export function VideoDetailPage() {
             </span>
             <div>
               <div style={{ fontWeight: 600 }}>
-                {video.story ? 'Rewriting the script with your changes…' : 'Writing the script…'}
+                {video.story
+                  ? 'Rewriting the script with your changes…'
+                  : video.source_url
+                    ? 'Reading the source and writing the script…'
+                    : 'Writing the script…'}
               </div>
               <div style={{ color: 'var(--text-2)', fontSize: 12 }}>
                 Reasoning models can take five to fifteen minutes. This page updates itself — the
                 story appears here for review the moment it's ready.
               </div>
+              {video.source_url && !video.story && (
+                <a
+                  href={video.source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--info)' }}
+                >
+                  {video.source_url}
+                </a>
+              )}
             </div>
           </div>
         </Card>
@@ -102,6 +116,14 @@ export function VideoDetailPage() {
       {video.status === 'story_review' && (
         <Card style={{ marginBottom: 24, borderColor: 'var(--info)' }}>
           <SectionLabel>Story review</SectionLabel>
+          {video.source_url && (
+            <div style={{ marginBottom: 10, fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+              <span style={{ color: 'var(--text-3)' }}>source · </span>
+              <a href={video.source_url} target="_blank" rel="noreferrer" style={{ color: 'var(--info)' }}>
+                {video.source_url}
+              </a>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
             <Button variant="go" busy={approveStory.isPending} onClick={() => approveStory.mutate(video.id)}>
               Approve story — start render

@@ -1,5 +1,5 @@
 Write a micro-documentary script about this true story/topic: "{{topic}}"
-
+{{source_block}}
 STRUCTURE (question → evidence → complication → answer):
 - Beat roles in order: hook (0-3s contradiction), setup (establish reality + causal event), escalation (expected explanation), turn (~23s: evidence that breaks the expected explanation), reveal (the actual answer), kicker (one final verified detail / memory anchor).
 - 8 to 12 beats total. The first major turn must land before ~25 seconds.

@@ -18,7 +18,8 @@ pnpm monorepo
 Pipeline per video (each step idempotent, keyed by content hash — retries never regenerate paid assets):
 
 ```
-topic → script (Ollama / Claude Code / Codex) → [you approve the story]
+topic or URL (Firecrawl scrapes the page + the pages it mentions)
+  → script (Ollama / Claude Code / Codex) → [you approve the story]
   → tts (per beat, measures real durations)
   → images (Nano Banana, byte-identical style prefix)
   → clips (fal.ai i2v, length derived from the narration audio)
@@ -83,6 +84,8 @@ Open http://localhost:4040. The Settings page shows live health for every servic
 | `GEMINI_IMAGE_MODEL` | image model id | default `gemini-2.5-flash-image` |
 | `FAL_KEY` | fal.ai image-to-video | https://fal.ai/dashboard/keys |
 | `FAL_VIDEO_MODEL` | i2v endpoint | default `minimax/h3-max/image-to-video` |
+| `FIRECRAWL_API_KEY` | generate-from-URL scraping | https://www.firecrawl.dev → dashboard → API Keys (`fc-…`) |
+| `FIRECRAWL_MAX_LINKED_PAGES` | linked pages also scraped per article | default `4` (each page = 1 credit ≈ $0.005) |
 | `OLLAMA_URL` / `OLLAMA_MODEL` / `OLLAMA_EMBED_MODEL` | free local LLM + embeddings | `http://localhost:11434`, `qwen3.6:latest`, `qwen3-embedding:0.6b` |
 | `CLAUDE_CLI_PATH` / `CODEX_CLI_PATH` | CLI story generators | `claude` / `codex` (uses your existing logins) |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | render-ready notifications | see below |

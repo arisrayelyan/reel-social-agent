@@ -25,6 +25,9 @@ export interface AppConfig {
   falKey: string;
   falVideoModel: string;
   falCostPerSecondUsd: number;
+  firecrawlApiKey: string;
+  firecrawlMaxLinkedPages: number;
+  firecrawlCostPerPageUsd: number;
   ttsUrl: string;
   captionsUrl: string;
   tiktokClientKey: string;
@@ -73,6 +76,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     falKey: env.FAL_KEY ?? '',
     falVideoModel: env.FAL_VIDEO_MODEL ?? 'minimax/h3-max/image-to-video',
     falCostPerSecondUsd: Number(env.FAL_COST_PER_SECOND_USD ?? 0.04),
+    firecrawlApiKey: env.FIRECRAWL_API_KEY ?? '',
+    firecrawlMaxLinkedPages: Number(env.FIRECRAWL_MAX_LINKED_PAGES ?? 4),
+    firecrawlCostPerPageUsd: Number(env.FIRECRAWL_COST_PER_PAGE_USD ?? 0.005),
     ttsUrl: env.TTS_URL ?? 'http://localhost:4042',
     captionsUrl: env.CAPTIONS_URL ?? 'http://localhost:4043',
     tiktokClientKey: env.TIKTOK_CLIENT_KEY ?? '',

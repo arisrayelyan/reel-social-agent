@@ -58,6 +58,9 @@ export async function embedText(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ model, input }),
+    // dedupe is best-effort and runs before the 202 response — a wedged
+    // Ollama must degrade to "skip dedupe", never block the request
+    signal: AbortSignal.timeout(8_000),
   });
   if (!res.ok) {
     throw new Error(`Ollama embed failed (${res.status}): ${await res.text()}`);

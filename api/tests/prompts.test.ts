@@ -46,6 +46,28 @@ describe('prompt templates (prompts/ folder)', () => {
     expect(prompt).not.toMatch(/\{\{\w+\}\}/);
   });
 
+  it('story prompt omits the source block without source material', () => {
+    expect(buildStoryPrompt(promptsDir, 'Lake Nyos')).not.toContain('SOURCE MATERIAL');
+  });
+
+  it('story prompt embeds source material when provided', () => {
+    const prompt = buildStoryPrompt(promptsDir, 'Lake Nyos', '# Scraped page\nDeadly CO2 cloud.');
+    expect(prompt).toContain('SOURCE MATERIAL');
+    expect(prompt).toContain('Deadly CO2 cloud.');
+    expect(prompt).not.toMatch(/\{\{\w+\}\}/);
+  });
+
+  it('change-request prompt carries source material through', () => {
+    const prompt = buildChangeRequestPrompt(
+      promptsDir,
+      'Lake Nyos',
+      '{"beats":[]}',
+      'shorter hook',
+      '# Scraped page\nDeadly CO2 cloud.',
+    );
+    expect(prompt).toContain('Deadly CO2 cloud.');
+  });
+
   it('change-request prompt embeds the base prompt, previous JSON and request', () => {
     const prompt = buildChangeRequestPrompt(promptsDir, 'Lake Nyos', '{"beats":[]}', 'shorter hook');
     expect(prompt).toContain('Lake Nyos');
