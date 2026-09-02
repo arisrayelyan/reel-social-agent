@@ -17,6 +17,24 @@ import { runPublishStep } from './steps/publish.js';
  * Redis only carries transient job state. Every step is idempotent via
  * content-hash asset lookups, so BullMQ's retries never regenerate paid work.
  */
+/** Plain-language lines for the activity log — statuses alone read like debug output. */
+const STEP_STARTED: Record<string, string> = {
+  tts: 'Voicing the narration',
+  images: 'Generating keyframe images',
+  clips: 'Animating the keyframes into clips',
+  merge: 'Assembling the video (audio drives timing)',
+  captions: 'Burning in the captions',
+  publish: 'Publishing to TikTok drafts',
+};
+const STEP_COMPLETED: Record<string, string> = {
+  tts: 'Narration voiced',
+  images: 'All keyframes generated',
+  clips: 'All clips animated',
+  merge: 'Video assembled',
+  captions: 'Captions rendered',
+  publish: 'Uploaded to TikTok drafts',
+};
+
 export function startWorker(app: FastifyInstance): Worker<PipelineJobData> {
   const worker = new Worker<PipelineJobData>(
     PIPELINE_QUEUE,
@@ -28,7 +46,12 @@ export function startWorker(app: FastifyInstance): Worker<PipelineJobData> {
       const story = StorySchema.parse(video.story);
 
       app.log.info({ videoId, step }, 'pipeline step started');
-      await publishEvent(app, { video_id: videoId, step, status: 'started' });
+      await publishEvent(app, {
+        video_id: videoId,
+        step,
+        status: 'started',
+        message: STEP_STARTED[step] ?? `${step} started`,
+      });
       await updateVideoStatus(app, videoId, step === 'publish' ? 'publishing' : 'rendering', step);
 
       switch (step) {
@@ -54,13 +77,24 @@ export function startWorker(app: FastifyInstance): Worker<PipelineJobData> {
           throw new Error(`Step "${String(step)}" is not a queue-executed step`);
       }
 
-      await publishEvent(app, { video_id: videoId, step, status: 'completed' });
+      await publishEvent(app, {
+        video_id: videoId,
+        step,
+        status: 'completed',
+        message: STEP_COMPLETED[step] ?? `${step} finished`,
+      });
 
       const next = step === 'publish' ? null : nextRenderStep(step);
       if (next) {
         await enqueueStep(app, videoId, next);
       } else if (step === 'captions') {
         await updateVideoStatus(app, videoId, 'render_review', null);
+        await publishEvent(app, {
+          video_id: videoId,
+          step: 'captions',
+          status: 'progress',
+          message: 'Render ready — waiting for your review',
+        });
         const telegram = new TelegramClient(app.config);
         await telegram
           .notifyApprovalNeeded({ videoId, topic: story.topic })

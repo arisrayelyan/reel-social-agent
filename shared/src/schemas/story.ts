@@ -60,17 +60,40 @@ export const StorySchema = z.object({
 export const TARGET_BEAT_COUNT = { min: 8, max: 12 } as const;
 
 /**
- * What we ask the LLM for: index/word_count/duration_seconds are optional
- * because the server recomputes all three in postProcessStory (145 wpm rule)
- * — demanding derived numbers from the model only causes validation retries.
+ * What we ask the LLM for. Deliberately more tolerant than StorySchema —
+ * every hard failure here costs a full paid CLI call, so a constraint is only
+ * strict when postProcessStory cannot normalize it away:
+ * - index/word_count/duration_seconds: recomputed server-side (145 wpm rule);
+ *   `.catch(undefined)` so even a wrong-typed volunteered value cannot fail
+ *   a field the prompt says to omit.
+ * - camera_locked defaults to false: models (observed: gpt-5.4-mini) omit the
+ *   field on unlocked beats instead of writing `false`, and only Ollama has
+ *   schema-constrained decoding to prevent that.
+ * - role is lowercased/trimmed before the enum ("Setup" is not a retry).
+ * - character caps (evidence_stamp 48, exhibit_tag 24, overlay_hook 80) are
+ *   render constraints, not story constraints: accept long values here and
+ *   shorten them in postProcessStory with a warning finding. Observed 2 Sep
+ *   2026: a 59-char evidence_stamp burned two paid calls.
  */
 export const LlmBeatSchema = BeatSchema.partial({
   index: true,
   word_count: true,
   duration_seconds: true,
+}).extend({
+  index: z.number().int().min(0).optional().catch(undefined),
+  word_count: z.number().int().positive().optional().catch(undefined),
+  duration_seconds: z.number().positive().optional().catch(undefined),
+  camera_locked: z.boolean().default(false),
+  role: z.preprocess(
+    (v) => (typeof v === 'string' ? v.toLowerCase().trim() : v),
+    z.enum(BEAT_ROLES),
+  ),
+  exhibit_tag: z.string().min(2).max(64).optional(),
 });
 export const LlmStorySchema = StorySchema.extend({
   beats: z.array(LlmBeatSchema).min(6).max(14),
+  overlay_hook: z.string().min(3).max(200).optional(),
+  evidence_stamp: z.string().min(4).max(200).optional(),
 });
 export type LlmStory = z.infer<typeof LlmStorySchema>;
 

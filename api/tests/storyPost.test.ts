@@ -4,6 +4,7 @@ import {
   END_TAIL_SECONDS,
   IMAGE_PROMPT_SUFFIX,
   MOTION_LOCKED_CAMERA,
+  LlmStorySchema,
   MOTION_NEGATIVES,
   StorySchema,
 } from '@reel-agent/shared';
@@ -30,6 +31,88 @@ describe('durationForWords (145 wpm rule)', () => {
   it('derives seconds from word count at 145 wpm', () => {
     expect(durationForWords(145)).toBe(60);
     expect(durationForWords(29)).toBe(12);
+  });
+});
+
+describe('LlmStorySchema', () => {
+  it('accepts an over-long evidence_stamp (normalized later, never a paid retry)', () => {
+    // the exact stamp that burned two codex calls on 2 Sep 2026
+    const story = { ...storyFixture(), evidence_stamp: 'WILLISTON RESERVOIR, BRITISH COLUMBIA, CANADA — AUGUST 2026' };
+    expect(LlmStorySchema.parse(story).evidence_stamp).toHaveLength(59);
+  });
+
+  it('lowercases and trims beat roles before the enum', () => {
+    const story = storyFixture();
+    const raw = { ...story, beats: story.beats.map((b, i) => (i === 1 ? { ...b, role: ' Setup ' } : b)) };
+    expect(LlmStorySchema.parse(raw).beats[1]!.role).toBe('setup');
+  });
+
+  it('still rejects a genuinely invalid role, naming the allowed values', () => {
+    const story = storyFixture();
+    const raw = { ...story, beats: story.beats.map((b, i) => (i === 2 ? { ...b, role: 'context' } : b)) };
+    expect(() => LlmStorySchema.parse(raw)).toThrow(/hook/);
+  });
+
+  it('swallows wrong-typed derived fields instead of failing the parse', () => {
+    const story = storyFixture();
+    const raw = {
+      ...story,
+      beats: story.beats.map((b) => ({ ...b, word_count: '42' as unknown as number, duration_seconds: 0 })),
+    };
+    const parsed = LlmStorySchema.parse(raw);
+    expect(parsed.beats[0]!.word_count).toBeUndefined();
+    expect(parsed.beats[0]!.duration_seconds).toBeUndefined();
+  });
+
+  it('defaults camera_locked to false when the model omits it on unlocked beats', () => {
+    const story = storyFixture();
+    const raw = {
+      ...story,
+      beats: story.beats.map(({ camera_locked, ...rest }, i) =>
+        // models write camera_locked only where it's true — omit it elsewhere
+        camera_locked && i >= 4 ? { ...rest, camera_locked } : rest,
+      ),
+    };
+    const parsed = LlmStorySchema.parse(raw);
+    expect(parsed.beats.every((b) => typeof b.camera_locked === 'boolean')).toBe(true);
+    expect(parsed.beats[0]!.camera_locked).toBe(false);
+    expect(parsed.beats[4]!.camera_locked).toBe(true);
+  });
+});
+
+describe('postProcessStory normalizers', () => {
+  it('shortens an over-long evidence_stamp on a word boundary, with a warning', () => {
+    const raw = {
+      ...storyFixture(),
+      evidence_stamp: 'WILLISTON RESERVOIR, BRITISH COLUMBIA, CANADA — AUGUST 2026',
+    };
+    const { story, findings } = postProcessStory(raw);
+    expect(story.evidence_stamp!.length).toBeLessThanOrEqual(48);
+    expect(story.evidence_stamp).toBe('WILLISTON RESERVOIR, BRITISH COLUMBIA, CANADA');
+    expect(findings.some((f) => f.rule === 'stamp.shortened' && f.severity === 'warning')).toBe(true);
+  });
+
+  it('shortens an over-long exhibit_tag with a warning', () => {
+    const raw = storyFixture();
+    raw.beats[2]!.exhibit_tag = 'EXHIBIT A — GAS LAKE CROSS SECTION DIAGRAM';
+    const { story, findings } = postProcessStory(raw);
+    expect(story.beats[2]!.exhibit_tag!.length).toBeLessThanOrEqual(24);
+    expect(findings.some((f) => f.rule === 'exhibit.shortened')).toBe(true);
+  });
+
+  it('prefers beats without camera moves when forcing locked cameras', () => {
+    const raw = storyFixture();
+    // no beat locked; last beat asks for a camera move, earlier ones do not
+    for (const b of raw.beats) b.camera_locked = false;
+    raw.beats.forEach((b, i) => {
+      b.motion_prompt = i >= 4 ? 'camera pushes in as steam vents from the crack' : 'steam vents from the crack';
+    });
+    const { story } = postProcessStory(raw);
+    const locked = story.beats.filter((b) => b.camera_locked).map((b) => b.index);
+    // beats 1-3 are clean candidates (0 is the hook); 4-5 ask for camera moves
+    expect(locked).toEqual([2, 3]);
+    expect(story.beats[4]!.camera_locked).toBe(false);
+    expect(story.beats[5]!.camera_locked).toBe(false);
   });
 });
 

@@ -92,9 +92,9 @@ STYLE — style_prefix (one reusable line for THIS story):
 Also produce:
 - topic — the short canonical form of the event.
 - hook — the spoken swipe-stopper, maximum 10 words.
-- overlay_hook — the on-screen version, maximum 8 words, no terminal punctuation. It may attack a different angle than the spoken hook; that is a feature. It must not restate the narration verbatim and must not spoil the reveal.
-- evidence_stamp — the place and date as they would be typed on a case file, uppercase, e.g. PLACE, COUNTRY — MONTH YEAR. Keep the year in digits here: this one is read on screen, never spoken.
-- exhibit_tag — optional, only on a map or diagram beat: a short uppercase tag of two or three words.
+- overlay_hook — the on-screen version, maximum 8 words and 80 characters, no terminal punctuation. It may attack a different angle than the spoken hook; that is a feature. It must not restate the narration verbatim and must not spoil the reveal.
+- evidence_stamp — the place and date as they would be typed on a case file, uppercase, MAXIMUM 48 CHARACTERS, e.g. PLACE, COUNTRY — MONTH YEAR. Abbreviate the region rather than exceed the cap — province and state names shorten to their usual initials, and the country drops when the region already places it. Keep the year in digits here: this one is read on screen, never spoken.
+- exhibit_tag — optional, only on a map or diagram beat: a short uppercase tag of two or three words, maximum 24 characters.
 - title — specific, not clickbait.
 - tiktok_caption — first line under 100 characters, a curiosity gap that does NOT spoil the reveal, then 3-5 relevant hashtags.
 

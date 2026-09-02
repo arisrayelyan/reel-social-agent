@@ -34,8 +34,42 @@ export function extractJson(text: string): string {
   return withoutFences.slice(start, end + 1);
 }
 
-/** Parses + validates, with the raw payload preserved in the error message. */
+/**
+ * Thrown when model output fails JSON parsing or schema validation. Carries
+ * the raw model text so the failure can be repaired (fed back to the model)
+ * and diagnosed (persisted in the failed generation_runs row) — before this,
+ * the only copy of a bad response lived in the CLI's own session files.
+ */
+export class LlmValidationError extends Error {
+  constructor(
+    message: string,
+    /** The unmodified model output. */
+    readonly raw: string,
+    /** Zod issues as "path: message" lines; empty for JSON syntax errors. */
+    readonly issues: string[] = [],
+  ) {
+    super(message);
+    this.name = 'LlmValidationError';
+  }
+}
+
+/** Parses + validates; failures throw LlmValidationError with the raw payload. */
 export function parseWithSchema<T>(schema: z.ZodType<T>, text: string): T {
-  const json = JSON.parse(extractJson(text)) as unknown;
-  return schema.parse(json);
+  let json: unknown;
+  try {
+    json = JSON.parse(extractJson(text));
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new LlmValidationError(`LLM output is not valid JSON: ${reason}`, text);
+  }
+  const result = schema.safeParse(json);
+  if (!result.success) {
+    const issues = result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+    throw new LlmValidationError(
+      `LLM output failed schema validation:\n${issues.join('\n')}`,
+      text,
+      issues,
+    );
+  }
+  return result.data;
 }

@@ -70,7 +70,7 @@ describe('GeneratePage', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/videos/7'));
     expect(api.post).toHaveBeenCalledWith('/api/generate/from-url', {
       url: 'https://example.com/article',
-      provider: 'ollama',
+      provider: 'codex',
     });
   });
 
@@ -107,7 +107,7 @@ describe('GeneratePage', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/videos/3'));
     expect(api.post).toHaveBeenLastCalledWith('/api/generate/story', {
       topic: 'The lighthouse that vanished',
-      provider: 'ollama',
+      provider: 'codex',
     });
   });
 });

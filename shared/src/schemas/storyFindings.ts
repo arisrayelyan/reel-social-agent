@@ -34,6 +34,19 @@ export type FindingField = (typeof FINDING_FIELDS)[number];
  */
 export const RULE_CAMERA_LOCKED_FORCED = 'story.camera_locked_forced';
 
+/**
+ * Also normalizer-emitted: render-constraint caps (evidence_stamp 48 chars,
+ * exhibit_tag 24) are accepted loose from the LLM and shortened here — a hard
+ * schema failure on an on-screen length cap costs a full paid CLI call.
+ */
+export const RULE_STAMP_SHORTENED = 'stamp.shortened';
+export const RULE_EXHIBIT_TAG_SHORTENED = 'exhibit.shortened';
+
+/** Render caps shared by the LLM prompt, the normalizer and the overlay. */
+export const EVIDENCE_STAMP_MAX_CHARS = 48;
+export const EXHIBIT_TAG_MAX_CHARS = 24;
+export const OVERLAY_HOOK_MAX_CHARS = 80;
+
 export const StoryFindingSchema = z.object({
   /**
    * Rule id, e.g. 'hook.word_count'. Deliberately z.string() and NOT z.enum:

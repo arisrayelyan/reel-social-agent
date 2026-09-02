@@ -32,4 +32,20 @@ describe('parseCodexJsonl', () => {
   it('throws when no agent message was produced', () => {
     expect(() => parseCodexJsonl('{"type":"turn.completed"}')).toThrow('no agent message');
   });
+
+  it('keeps the JSON payload when codex appends a trailing summary message', () => {
+    const stdout = [
+      '{"type":"item.completed","item":{"type":"agent_message","text":"{\\"a\\":1}"}}',
+      '{"type":"item.completed","item":{"type":"agent_message","text":"Done! Let me know if you need edits."}}',
+    ].join('\n');
+    expect(parseCodexJsonl(stdout).text).toBe('{"a":1}');
+  });
+
+  it('falls back to the last message when none contains JSON', () => {
+    const stdout = [
+      '{"type":"item.completed","item":{"type":"agent_message","text":"first"}}',
+      '{"type":"item.completed","item":{"type":"agent_message","text":"second"}}',
+    ].join('\n');
+    expect(parseCodexJsonl(stdout).text).toBe('second');
+  });
 });

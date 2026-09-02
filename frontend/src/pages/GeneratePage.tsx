@@ -28,7 +28,7 @@ function validateUrl(value: string): string | null {
 export function GeneratePage() {
   const navigate = useNavigate();
   const { generateStory, generateFromUrl, suggestTopics } = useVideoMutations();
-  const [provider, setProvider] = useState<Provider>('ollama');
+  const [provider, setProvider] = useState<Provider>('codex');
   const [mode, setMode] = useState<Mode>('topic');
   const [topic, setTopic] = useState('');
   const [url, setUrl] = useState('');

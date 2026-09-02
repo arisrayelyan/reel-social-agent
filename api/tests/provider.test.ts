@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { extractJson, parseWithSchema } from '../src/llm/provider.js';
+import { extractJson, LlmValidationError, parseWithSchema } from '../src/llm/provider.js';
 
 describe('extractJson', () => {
   it('strips markdown fences', () => {
@@ -23,7 +23,31 @@ describe('parseWithSchema', () => {
     expect(parseWithSchema(schema, '{"topic":"x","n":1}')).toEqual({ topic: 'x', n: 1 });
   });
 
-  it('rejects schema violations', () => {
-    expect(() => parseWithSchema(schema, '{"topic":"x"}')).toThrow();
+  it('rejects schema violations with the raw output and issue paths attached', () => {
+    let thrown: unknown;
+    try {
+      parseWithSchema(schema, '{"topic":"x"}');
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(LlmValidationError);
+    const err = thrown as LlmValidationError;
+    expect(err.raw).toBe('{"topic":"x"}');
+    expect(err.issues).toEqual(['n: Invalid input: expected number, received undefined']);
+    expect(err.message).toContain('n:');
+  });
+
+  it('wraps JSON syntax errors with the raw output, no issues', () => {
+    let thrown: unknown;
+    try {
+      parseWithSchema(schema, "{'topic': 'single quotes'}");
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(LlmValidationError);
+    const err = thrown as LlmValidationError;
+    expect(err.raw).toBe("{'topic': 'single quotes'}");
+    expect(err.issues).toEqual([]);
+    expect(err.message).toContain('not valid JSON');
   });
 });

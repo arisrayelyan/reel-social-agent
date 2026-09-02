@@ -1,4 +1,5 @@
 import path from 'node:path';
+import os from 'node:os';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
@@ -18,11 +19,19 @@ export const TEST_DATABASE_URL =
 export const TEST_REDIS_URL =
   process.env.TEST_REDIS_URL ?? 'redis://:123456@localhost:6378/1';
 
+/**
+ * Isolated media dir — tests must NEVER point at the real storage/ folder:
+ * the delete route removes storage/videos/<id> recursively, and test video
+ * ids restart from 1, which are real videos in the production storage dir.
+ */
+export const TEST_STORAGE_DIR = path.join(os.tmpdir(), 'reel-agent-test-storage');
+
 export async function buildTestApp(): Promise<FastifyInstance> {
   const config = loadConfig({
     ...process.env,
     DATABASE_URL: TEST_DATABASE_URL,
     REDIS_URL: TEST_REDIS_URL,
+    STORAGE_DIR: TEST_STORAGE_DIR,
     LOG_LEVEL: 'silent',
     NODE_ENV: 'production',
   });

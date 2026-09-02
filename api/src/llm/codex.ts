@@ -57,7 +57,10 @@ export function parseCodexJsonl(stdout: string): {
   outputTokens: number | null;
   model: string | null;
 } {
-  let text = '';
+  // All agent messages, in order. The story is not always the LAST message —
+  // codex sometimes appends a short closing remark after the JSON — so below
+  // we prefer the last message that actually contains a JSON object.
+  const texts: string[] = [];
   let inputTokens: number | null = null;
   let outputTokens: number | null = null;
   let model: string | null = null;
@@ -72,13 +75,13 @@ export function parseCodexJsonl(stdout: string): {
       continue;
     }
     const item = event.item as Record<string, unknown> | undefined;
-    if (event.type === 'item.completed' && item?.type === 'agent_message') {
-      text = String(item.text ?? '');
+    if (event.type === 'item.completed' && item?.type === 'agent_message' && typeof item.text === 'string') {
+      texts.push(item.text);
     }
     // older codex versions wrap events as {"msg": {"type": "agent_message", ...}}
     const msg = event.msg as Record<string, unknown> | undefined;
     if (msg?.type === 'agent_message' && typeof msg.message === 'string') {
-      text = msg.message;
+      texts.push(msg.message);
     }
     const usage = (event.usage ?? msg?.usage ?? (event.info as Record<string, unknown> | undefined)?.total_token_usage) as
       | { input_tokens?: number; output_tokens?: number }
@@ -90,6 +93,7 @@ export function parseCodexJsonl(stdout: string): {
     if (typeof event.model === 'string') model = event.model;
   }
 
+  const text = texts.findLast((t) => t.includes('{')) ?? texts.at(-1) ?? '';
   if (!text) throw new Error('codex CLI produced no agent message');
   return { text, inputTokens, outputTokens, model };
 }

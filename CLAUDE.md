@@ -48,6 +48,7 @@ One `tests/` folder per service (`api/tests`, `frontend/tests`, `services/captio
 - Prompt examples rotate: `HOOK_EXAMPLE_POOL` in `shared/src/craft.ts` is sampled per topic, and `story.example_leakage` errors if a story copies one. **Every illustrative sentence in `prompts/story.user.md` must be wrapped in backticks** — that is how `storyPromptExamples()` finds them; never backtick a line the model is supposed to copy (capture-medium lines, shot-type prefixes).
 - TikTok integration exists but is parked (see README). Do not delete `clients/tiktok.ts` / the publish step; they are the planned next phase.
 - Model ids are env-configurable and move fast (docs §1 of pipeline-learnings) — never hardcode a model name outside config defaults.
+- **Every `LlmStorySchema` constraint must either be stated in the prompt or normalized away in `postProcessStory`** — a cap the model can't know about is a paid schema retry (observed: an undocumented 48-char `evidence_stamp` cap burned two codex calls). Only Ollama has schema-constrained decoding; the CLI providers return whatever the prompt earns. Story generation is budgeted at **2 provider calls max** (`runStoryGeneration` — one attempt + one unified repair/rewrite retry), a valid first draft always survives a broken retry, and failed attempts persist the raw model output in `generation_runs.output.raw`.
 
 ## Verification
 

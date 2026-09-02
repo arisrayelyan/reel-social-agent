@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import type { Asset, GenerationRun, Publication, Video } from '@reel-agent/shared';
+import type { Asset, GenerationRun, Publication, Video, VideoEvent } from '@reel-agent/shared';
 import { api } from '@/lib/api';
 
 export interface VideoDetail extends Video {
   assets: Asset[];
   runs: GenerationRun[];
   publications: Publication[];
+  events: VideoEvent[];
 }
 
 const LIVE_STATUSES = new Set(['draft', 'approved', 'rendering', 'publishing']);

@@ -1,12 +1,19 @@
 import {
   BEAT_GAP_SECONDS,
+  CAMERA_VERBS,
   END_TAIL_SECONDS,
+  EVIDENCE_STAMP_MAX_CHARS,
+  EXHIBIT_TAG_MAX_CHARS,
   IMAGE_PROMPT_SUFFIX,
   MOTION_LOCKED_CAMERA,
   MOTION_NEGATIVES,
+  OVERLAY_HOOK_MAX_CHARS,
   OVERLAY_HOOK_MAX_WORDS,
   RULE_CAMERA_LOCKED_FORCED,
+  RULE_EXHIBIT_TAG_SHORTENED,
+  RULE_STAMP_SHORTENED,
   WORDS_PER_MINUTE,
+  matchVerbKeys,
   sortFindings,
   type LlmStory,
   type Story,
@@ -47,13 +54,23 @@ export function durationForWords(wordCount: number): number {
  * result than a purpose-written line, so postProcessStory warns about it.
  */
 export function deriveOverlayHook(hook: string): string {
-  return hook
+  const capped = hook
     .trim()
     .replace(/[.!?…]+$/, '')
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, OVERLAY_HOOK_MAX_WORDS)
     .join(' ');
+  return shortenToChars(capped, OVERLAY_HOOK_MAX_CHARS);
+}
+
+/** Cuts on a word boundary so an on-screen cap never slices mid-word. */
+export function shortenToChars(text: string, maxChars: number): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxChars) return trimmed;
+  const cut = trimmed.slice(0, maxChars + 1);
+  const boundary = cut.lastIndexOf(' ');
+  return (boundary > 0 ? cut.slice(0, boundary) : cut.slice(0, maxChars)).replace(/[,;:—–-]+$/, '').trim();
 }
 
 export function postProcessStory(
@@ -64,11 +81,25 @@ export function postProcessStory(
 
   const beats = raw.beats.map((beat, i) => {
     const word_count = countWords(beat.narration);
+    let exhibit_tag = beat.exhibit_tag;
+    if (exhibit_tag && exhibit_tag.length > EXHIBIT_TAG_MAX_CHARS) {
+      const shortened = shortenToChars(exhibit_tag, EXHIBIT_TAG_MAX_CHARS);
+      findings.push({
+        rule: RULE_EXHIBIT_TAG_SHORTENED,
+        severity: 'warning',
+        field: 'story',
+        beat_index: i,
+        detail: `exhibit_tag was ${exhibit_tag.length} chars — shortened to fit the ${EXHIBIT_TAG_MAX_CHARS}-char overlay tag`,
+        evidence: exhibit_tag,
+      });
+      exhibit_tag = shortened;
+    }
     return {
       ...beat,
       index: i,
       word_count,
       duration_seconds: durationForWords(word_count),
+      exhibit_tag,
     };
   });
 
@@ -88,10 +119,20 @@ export function postProcessStory(
   // normalizer knows the pre-forcing count, because the validator sees the
   // story after the mutation has already run.
   if (beats.filter((b) => b.camera_locked).length < 2) {
-    // Force the last two non-hook beats static rather than reject the story.
-    for (let i = beats.length - 1; i >= 0 && beats.filter((b) => b.camera_locked).length < 2; i--) {
-      const beat = beats[i]!;
-      if (beat.role !== 'hook') beat.camera_locked = true;
+    // Force late non-hook beats static rather than reject the story. Beats
+    // whose motion_prompt names no camera move go first: forcing a beat that
+    // asks for one trips motion.locked_has_camera_move (an error) and buys a
+    // paid craft retry for a story that is otherwise fine.
+    const lockable = (b: (typeof beats)[number]) => b.role !== 'hook' && !b.camera_locked;
+    const hasMove = (b: (typeof beats)[number]) =>
+      matchVerbKeys(b.motion_prompt, CAMERA_VERBS).length > 0;
+    const candidates = [
+      ...beats.filter((b) => lockable(b) && !hasMove(b)).reverse(),
+      ...beats.filter((b) => lockable(b) && hasMove(b)).reverse(),
+    ];
+    for (const beat of candidates) {
+      if (beats.filter((b) => b.camera_locked).length >= 2) break;
+      beat.camera_locked = true;
     }
     findings.push({
       rule: RULE_CAMERA_LOCKED_FORCED,
@@ -125,7 +166,21 @@ export function postProcessStory(
     });
   }
 
-  const story: Story = { ...raw, overlay_hook, beats };
+  let evidence_stamp = raw.evidence_stamp?.trim() || undefined;
+  if (evidence_stamp && evidence_stamp.length > EVIDENCE_STAMP_MAX_CHARS) {
+    const shortened = shortenToChars(evidence_stamp, EVIDENCE_STAMP_MAX_CHARS);
+    findings.push({
+      rule: RULE_STAMP_SHORTENED,
+      severity: 'warning',
+      field: 'evidence_stamp',
+      beat_index: null,
+      detail: `evidence_stamp was ${evidence_stamp.length} chars — shortened to fit the ${EVIDENCE_STAMP_MAX_CHARS}-char on-screen stamp`,
+      evidence: evidence_stamp,
+    });
+    evidence_stamp = shortened;
+  }
+
+  const story: Story = { ...raw, overlay_hook, evidence_stamp, beats };
   findings.push(
     ...validateStory(story, {
       promptExamples: opts.promptExamples,

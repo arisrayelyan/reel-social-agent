@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { rm } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -17,6 +19,7 @@ import {
 import { findAssetsByVideo, selectAssetTake } from '../database/queries/assets.js';
 import { findRunsByVideo } from '../database/queries/generationRuns.js';
 import { findPublicationsByVideo } from '../database/queries/publications.js';
+import { findEventsByVideo } from '../database/queries/videoEvents.js';
 import { enqueueStep, RENDER_CHAIN } from '../pipeline/queue.js';
 import { costPerSecondFor } from '../clients/falModels.js';
 import { EVENTS_CHANNEL } from '../pipeline/events.js';
@@ -32,21 +35,47 @@ export async function videosRouter(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const video = await findVideoById(app, request.params.id);
       if (!video) return reply.code(404).send({ error: 'Video not found' });
-      const [assets, runs, publications] = await Promise.all([
+      const [assets, runs, publications, events] = await Promise.all([
         findAssetsByVideo(app, video.id),
         findRunsByVideo(app, video.id),
         findPublicationsByVideo(app, video.id),
+        findEventsByVideo(app, video.id),
       ]);
-      return { ...video, assets, runs, publications };
+      return { ...video, assets, runs, publications, events };
     },
   );
 
+  /**
+   * Deletes a video and everything it owns: pending pipeline jobs (so the
+   * worker never runs a step for a row that is gone), the DB row (assets,
+   * runs and publications cascade), and the media directory on disk. Job and
+   * file cleanup are best-effort — a Redis or fs hiccup must not leave the
+   * video undeletable.
+   */
   r.delete(
     '/videos/:id',
     { schema: { params: VideoIdParamSchema } },
     async (request, reply) => {
-      const deleted = await deleteVideo(app, request.params.id);
+      const id = request.params.id;
+      try {
+        const jobs = await app.pipelineQueue.getJobs(['waiting', 'delayed', 'prioritized']);
+        await Promise.all(
+          jobs
+            .filter((job) => job.data.videoId === id)
+            .map((job) => job.remove().catch(() => undefined)),
+        );
+      } catch (err) {
+        app.log.warn({ err, videoId: id }, 'pipeline job cleanup failed — deleting video anyway');
+      }
+
+      const deleted = await deleteVideo(app, id);
       if (!deleted) return reply.code(404).send({ error: 'Video not found' });
+
+      const mediaDir = path.join(app.config.storageDir, 'videos', String(id));
+      await rm(mediaDir, { recursive: true, force: true }).catch((err) => {
+        app.log.warn({ err, mediaDir, videoId: id }, 'failed to remove media directory');
+      });
+
       return { ok: true };
     },
   );

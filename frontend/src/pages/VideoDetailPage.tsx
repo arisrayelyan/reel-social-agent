@@ -17,7 +17,7 @@ export function VideoDetailPage() {
   const { generateStory, approveStory, approveRender, upgradeClips, retry, deleteVideo } =
     useVideoMutations();
   const [changeRequest, setChangeRequest] = useState('');
-  const [regenProvider, setRegenProvider] = useState<Provider>('ollama');
+  const [regenProvider, setRegenProvider] = useState<Provider>('codex');
 
   const live =
     video?.status === 'draft' || video?.status === 'rendering' || video?.status === 'publishing';
@@ -112,6 +112,44 @@ export function VideoDetailPage() {
               Retry step (reuses finished assets)
             </Button>
           )}
+        </Card>
+      )}
+
+      {/* activity log — persisted pipeline events, newest first */}
+      {(video.events?.length ?? 0) > 0 && (
+        <Card style={{ marginBottom: 24 }}>
+          <SectionLabel>Activity</SectionLabel>
+          <div
+            style={{
+              maxHeight: 260,
+              overflowY: 'auto',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 3,
+            }}
+          >
+            {video.events.map((event) => (
+              <div key={event.id} style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
+                <span style={{ color: 'var(--text-3)', flexShrink: 0 }}>
+                  {new Date(event.created_at).toLocaleTimeString([], { hour12: false })}
+                </span>
+                <span
+                  style={{
+                    color:
+                      event.level === 'error'
+                        ? 'var(--warn)'
+                        : event.level === 'warning'
+                          ? 'var(--accent)'
+                          : 'var(--text-2)',
+                  }}
+                >
+                  {event.message}
+                </span>
+              </div>
+            ))}
+          </div>
         </Card>
       )}
 

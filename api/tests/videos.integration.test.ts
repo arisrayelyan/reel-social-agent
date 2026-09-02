@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { existsSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildTestApp, storyFixture, truncateAll } from './helpers.js';
@@ -105,6 +108,40 @@ describe('DELETE /api/videos/:id', () => {
     const res = await app.inject({ method: 'DELETE', url: `/api/videos/${video.id}` });
     expect(res.statusCode).toBe(200);
     expect(await findVideoById(app, video.id)).toBeNull();
+  });
+
+  it('drains pending pipeline jobs and removes the media directory', async () => {
+    const video = await seedVideo();
+    const other = await seedVideo();
+
+    await app.pipelineQueue.add(
+      'tts',
+      { videoId: video.id, step: 'tts' },
+      { jobId: `${video.id}:tts:${Date.now()}` },
+    );
+    await app.pipelineQueue.add(
+      'tts',
+      { videoId: other.id, step: 'tts' },
+      { jobId: `${other.id}:tts:${Date.now()}` },
+    );
+
+    const mediaDir = path.join(app.config.storageDir, 'videos', String(video.id));
+    await mkdir(path.join(mediaDir, '01_images'), { recursive: true });
+    await writeFile(path.join(mediaDir, '01_images', 'beat_00_v1.png'), 'fake');
+
+    const res = await app.inject({ method: 'DELETE', url: `/api/videos/${video.id}` });
+    expect(res.statusCode).toBe(200);
+    expect(await findVideoById(app, video.id)).toBeNull();
+    expect(existsSync(mediaDir)).toBe(false);
+
+    // only the deleted video's jobs are drained
+    const remaining = await app.pipelineQueue.getJobs(['waiting', 'delayed', 'prioritized']);
+    expect(remaining.map((j) => j.data.videoId)).toEqual([other.id]);
+  });
+
+  it('404s on a missing video', async () => {
+    const res = await app.inject({ method: 'DELETE', url: '/api/videos/9999' });
+    expect(res.statusCode).toBe(404);
   });
 });
 

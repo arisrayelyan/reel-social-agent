@@ -7,10 +7,19 @@ import {
   SuggestTopicsBodySchema,
   TopicIdeasSchema,
   summarizeFindings,
+  type LlmStory,
   type Provider,
 } from '@reel-agent/shared';
 import { extractLinkedUrls, FirecrawlClient } from '../clients/firecrawl.js';
-import { generateJsonWithRetry, getProvider, type LlmProvider } from '../llm/index.js';
+import {
+  buildRepairInstruction,
+  generateJsonWithRetry,
+  getProvider,
+  isFatalLlmError,
+  LlmValidationError,
+  type LlmProvider,
+  type LlmResult,
+} from '../llm/index.js';
 import { embedText } from '../llm/ollama.js';
 import {
   buildChangeRequestPrompt,
@@ -20,7 +29,7 @@ import {
   storySystem,
   topicsSystem,
 } from '../llm/prompts.js';
-import { postProcessStory } from '../utils/storyPost.js';
+import { postProcessStory, type StoryValidation } from '../utils/storyPost.js';
 import {
   addVideoCost,
   createDraftVideo,
@@ -99,44 +108,109 @@ function runStoryGeneration(
       const promptExamples = storyPromptExamples(app.config.promptsDir, opts.topic);
       const system = storySystem(app.config.promptsDir);
 
-      const attempt = async (prompt: string) => {
-        const result = await generateJsonWithRetry(opts.provider, {
-          system,
-          prompt,
-          schema: LlmStorySchema,
-        });
-        return { result, processed: postProcessStory(result.data, { promptExamples }) };
+      type GoodAttempt = { ok: true; result: LlmResult<LlmStory>; processed: StoryValidation };
+      type BadAttempt = { ok: false; error: unknown };
+
+      // Direct provider call — deliberately NOT generateJsonWithRetry: this
+      // loop is the single retry budget. Schema failure, craft failure and
+      // the retry itself all share ONE second call, never more (a story used
+      // to cost up to 4 paid CLI calls). Validation failures come back as a
+      // value; only unfixable errors (timeout, missing CLI) throw.
+      const attempt = async (prompt: string): Promise<GoodAttempt | BadAttempt> => {
+        try {
+          const result = await opts.provider.generateJson({
+            system,
+            prompt,
+            schema: LlmStorySchema,
+          });
+          return { ok: true, result, processed: postProcessStory(result.data, { promptExamples }) };
+        } catch (err) {
+          if (isFatalLlmError(err)) throw err;
+          return { ok: false, error: err };
+        }
       };
+      const recordFailedAttempt = (error: unknown, attemptStartedAt: number, n: number) =>
+        insertGenerationRun(app, {
+          videoId: opts.videoId,
+          step: 'script',
+          provider: opts.providerName,
+          model: 'unknown',
+          prompt: opts.runPrompt,
+          output: {
+            attempt: n,
+            error: (error instanceof Error ? error.message : String(error)).slice(0, 2000),
+            raw: error instanceof LlmValidationError ? error.raw.slice(0, 4000) : null,
+          },
+          costUsd: 0,
+          durationMs: Date.now() - attemptStartedAt,
+          status: 'failed',
+        }).catch(() => undefined);
+      const errorsIn = (v: GoodAttempt) =>
+        v.processed.findings.filter((f) => f.severity === 'error');
 
-      let best = await attempt(opts.prompt);
-      let totalCost = best.result.costUsd;
-      await recordScriptRun(app, opts, best, startedAt, 1);
+      const first = await attempt(opts.prompt);
+      let best: GoodAttempt | null = null;
+      let totalCost = 0;
+      if (first.ok) {
+        totalCost += first.result.costUsd;
+        await recordScriptRun(app, opts, first, startedAt, 1);
+        best = first;
+      } else {
+        await recordFailedAttempt(first.error, startedAt, 1);
+      }
 
-      // ONE craft retry. Deliberately separate from generateJsonWithRetry,
-      // which retries SCHEMA failures — a craft rule routed through that path
-      // would fail twice and mark the video failed. Free on Ollama, one extra
-      // CLI call otherwise. Both attempts stay in generation_runs so the retry
-      // rate is itself a visible measure of prompt health.
-      const errorsIn = (v: typeof best) => v.processed.findings.filter((f) => f.severity === 'error');
-      if (errorsIn(best).length > 0) {
-        const violations = errorsIn(best)
+      // Decide the single retry: repair invalid JSON, or rewrite craft errors.
+      let retryPrompt: string | null = null;
+      let retryMessage = '';
+      if (!first.ok) {
+        retryPrompt = `${opts.prompt}\n\n${buildRepairInstruction(first.error)}`;
+        retryMessage = 'The draft came back invalid — repairing it (last retry)';
+      } else if (errorsIn(first).length > 0) {
+        const violations = errorsIn(first)
           .map((f) => `- ${f.beat_index === null ? 'story' : `beat ${f.beat_index}`}: ${f.detail}`)
           .join('\n');
+        retryPrompt = `${opts.prompt}\n\nYour previous draft broke these hard rules. Rewrite the FULL story fixing every one of them, and keep everything else that already worked:\n${violations}`;
+        retryMessage = `Rewriting: ${errorsIn(first).length} hard rule violations (last retry)`;
+      }
+
+      if (retryPrompt) {
         await publishEvent(app, {
           video_id: opts.videoId,
           step: 'script',
           status: 'progress',
-          message: `Rewriting: ${errorsIn(best).length} hard rule violations`,
+          level: 'warning',
+          message: retryMessage,
         });
         const retryStartedAt = Date.now();
-        const retried = await attempt(
-          `${opts.prompt}\n\nYour previous draft broke these hard rules. Rewrite the FULL story fixing every one of them, and keep everything else that already worked:\n${violations}`,
-        );
-        totalCost += retried.result.costUsd;
-        await recordScriptRun(app, opts, retried, retryStartedAt, 2);
-        if (errorsIn(retried).length < errorsIn(best).length) best = retried;
+        let second: GoodAttempt | BadAttempt;
+        try {
+          second = await attempt(retryPrompt);
+        } catch (err) {
+          // fatal on the retry (e.g. timeout) — a good first draft must survive it
+          if (!best) throw err;
+          second = { ok: false, error: err };
+        }
+        if (second.ok) {
+          totalCost += second.result.costUsd;
+          await recordScriptRun(app, opts, second, retryStartedAt, 2);
+          if (!best || errorsIn(second).length < errorsIn(best).length) best = second;
+        } else {
+          await recordFailedAttempt(second.error, retryStartedAt, 2);
+          if (best) {
+            await publishEvent(app, {
+              video_id: opts.videoId,
+              step: 'script',
+              status: 'progress',
+              level: 'warning',
+              message: 'Retry failed — keeping the first draft',
+            });
+          } else {
+            throw second.error instanceof Error ? second.error : new Error(String(second.error));
+          }
+        }
       }
 
+      if (!best) throw new Error('story generation produced no valid draft');
       await addVideoCost(app, opts.videoId, totalCost);
       await updateVideoStory(
         app,
@@ -149,24 +223,29 @@ function runStoryGeneration(
         video_id: opts.videoId,
         step: 'script',
         status: 'completed',
+        level: errorsIn(best).length > 0 ? 'warning' : 'info',
         // summarize, don't join: a sloppy story now yields ~20 findings and
         // joining them ships a paragraph into a 12px mono status strip
-        message: summarizeFindings(best.processed.findings),
+        message: summarizeFindings(best.processed.findings) ?? 'Script ready for review',
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       app.log.error({ err, videoId: opts.videoId }, 'script generation failed');
-      await insertGenerationRun(app, {
-        videoId: opts.videoId,
-        step: 'script',
-        provider: opts.providerName,
-        model: 'unknown',
-        prompt: opts.runPrompt,
-        output: { error: message.slice(0, 2000) },
-        costUsd: 0,
-        durationMs: Date.now() - startedAt,
-        status: 'failed',
-      }).catch(() => undefined);
+      // validation failures already have per-attempt failed rows (with raw
+      // output) from recordFailedAttempt — don't insert a duplicate
+      if (!(err instanceof LlmValidationError)) {
+        await insertGenerationRun(app, {
+          videoId: opts.videoId,
+          step: 'script',
+          provider: opts.providerName,
+          model: 'unknown',
+          prompt: opts.runPrompt,
+          output: { error: message.slice(0, 2000) },
+          costUsd: 0,
+          durationMs: Date.now() - startedAt,
+          status: 'failed',
+        }).catch(() => undefined);
+      }
       await updateVideoStatus(app, opts.videoId, 'failed', 'script', message.slice(0, 2000));
       await publishEvent(app, {
         video_id: opts.videoId,

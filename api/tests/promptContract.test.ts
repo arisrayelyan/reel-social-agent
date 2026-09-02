@@ -71,11 +71,32 @@ const HARD_RULES: Array<{ name: string; re: RegExp }> = [
   { name: 'evidence stamp', re: /evidence_stamp/ },
   { name: 'caption fold', re: /under 100 characters/ },
   { name: 'derived fields omitted', re: /Do NOT output index, word_count or duration_seconds/ },
+  // render caps — a cap the model can't know about is a paid schema retry
+  // (observed 2 Sep 2026: a 59-char evidence_stamp burned two codex calls)
+  { name: 'evidence stamp 48-char cap', re: /MAXIMUM 48 CHARACTERS/ },
+  { name: 'exhibit tag 24-char cap', re: /maximum 24 characters/ },
+  { name: 'overlay hook 80-char cap', re: /80 characters/ },
+];
+
+/** The JSON envelope is system-prompt territory — asserted separately. */
+const SYSTEM_CONTRACT: Array<{ name: string; re: RegExp }> = [
+  { name: 'output format skeleton', re: /OUTPUT FORMAT/ },
+  { name: 'beats key named', re: /"beats":/ },
+  { name: 'role enum spelled out', re: /hook, setup, escalation, turn, reveal, kicker — lowercase/ },
+  { name: 'camera_locked on every beat', re: /"camera_locked" must be present on EVERY beat/ },
+  { name: 'no markdown fences', re: /no markdown fences/ },
+  { name: 'no extra keys', re: /Do not add any keys beyond these/ },
 ];
 
 describe('story prompt still states every hard rule', () => {
   it.each(HARD_RULES)('$name', ({ re }) => {
     expect(prompt()).toMatch(re);
+  });
+});
+
+describe('system prompt still states the JSON output contract', () => {
+  it.each(SYSTEM_CONTRACT)('$name', ({ re }) => {
+    expect(storySystem(promptsDir)).toMatch(re);
   });
 });
 
