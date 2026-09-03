@@ -39,7 +39,7 @@ export function useVideoMutations() {
   });
 
   const suggestTopics = useMutation({
-    mutationFn: (body: { provider: string; count: number }) =>
+    mutationFn: (body: { provider: string; model?: string; count: number }) =>
       api.post<TopicIdeas>('/api/generate/topics', body).then((r) => r.data),
     onError: (err) => toast.error(errorMessage(err)),
   });

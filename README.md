@@ -19,7 +19,7 @@ Pipeline per video (each step idempotent, keyed by content hash — retries neve
 
 ```
 topic or URL (Firecrawl scrapes the page + the pages it mentions)
-  → script (Ollama / Claude Code / Codex) → [you approve the story]
+  → script (Ollama / Claude Code / Codex / Cursor Agent) → [you approve the story]
   → tts (per beat, measures real durations)
   → images (Nano Banana, byte-identical style prefix)
   → clips (fal.ai i2v, length derived from the narration audio)
@@ -38,7 +38,7 @@ Postgres is the source of truth (state machine per video); Redis/BullMQ carries 
 - PostgreSQL with pgvector on port **5439** (you have the `pgvector-db` container)
 - Redis on port **6378** with password `123456` (you have the `redis-mq` container)
 - [Ollama](https://ollama.com) with `qwen3.6:latest` and `qwen3-embedding:0.6b` pulled
-- Optional for paid story generation: `claude` (Claude Code) and `codex` CLIs on PATH
+- Optional for paid story generation: `claude` (Claude Code), `codex` and `cursor-agent` CLIs on PATH
 
 ## Setup
 
@@ -87,7 +87,8 @@ Open http://localhost:4040. The Settings page shows live health for every servic
 | `FIRECRAWL_API_KEY` | generate-from-URL scraping | https://www.firecrawl.dev → dashboard → API Keys (`fc-…`) |
 | `FIRECRAWL_MAX_LINKED_PAGES` | linked pages also scraped per article | default `4` (each page = 1 credit ≈ $0.005) |
 | `OLLAMA_URL` / `OLLAMA_MODEL` / `OLLAMA_EMBED_MODEL` | free local LLM + embeddings | `http://localhost:11434`, `qwen3.6:latest`, `qwen3-embedding:0.6b` |
-| `CLAUDE_CLI_PATH` / `CODEX_CLI_PATH` | CLI story generators | `claude` / `codex` (uses your existing logins) |
+| `CLAUDE_CLI_PATH` / `CODEX_CLI_PATH` / `CURSOR_CLI_PATH` | CLI story generators | `claude` / `codex` / `cursor-agent` (uses your existing logins) |
+| `CURSOR_MODEL` / `CURSOR_PRICE_PER_MTOK_MAP` | fallback Cursor model + cost estimate overrides | `claude-opus-5-thinking-high`; the Generate page picks model + effort per request |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | render-ready notifications | see below |
 | `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` | TikTok inbox upload (parked, optional) | https://developers.tiktok.com/apps — needs Login Kit + Content Posting (`video.upload` scope) |
 | `STORAGE_DIR` / `PROMPTS_DIR` | media + prompt template folders | defaults `../storage`, `../prompts` |
@@ -123,7 +124,7 @@ Every video's topic is embedded (Ollama `qwen3-embedding`, pgvector HNSW index).
 
 ## Costs
 
-Every AI call is recorded in `generation_runs` (provider, model, tokens, dollars, latency) and shown per video in the dashboard. Rough per-video estimate with defaults: images ~$0.4 (10 × $0.039), clips ~$2.4–4 (fal H3 Max 768p), script $0 (Ollama) to ~$0.10 (Claude/Codex), TTS/captions/merge $0.
+Every AI call is recorded in `generation_runs` (provider, model, tokens, dollars, latency) and shown per video in the dashboard. Rough per-video estimate with defaults: images ~$0.4 (10 × $0.039), clips ~$2.4–4 (fal H3 Max 768p), script $0 (Ollama) to ~$0.10-0.30 (Claude/Codex/Cursor), TTS/captions/merge $0.
 
 ## TikTok (parked)
 

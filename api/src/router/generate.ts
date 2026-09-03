@@ -360,8 +360,8 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
     '/generate/story',
     { schema: { body: GenerateStoryBodySchema } },
     async (request, reply) => {
-      const { topic, provider: providerName, change_request, video_id } = request.body;
-      const provider = getProvider(app.config, providerName);
+      const { topic, provider: providerName, model, change_request, video_id } = request.body;
+      const provider = getProvider(app.config, providerName, model);
 
       // — regeneration of an existing draft —
       if (video_id) {
@@ -427,8 +427,8 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
     '/generate/from-url',
     { schema: { body: GenerateFromUrlBodySchema } },
     async (request, reply) => {
-      const { url, provider: providerName } = request.body;
-      const provider = getProvider(app.config, providerName);
+      const { url, provider: providerName, model } = request.body;
+      const provider = getProvider(app.config, providerName, model);
       if (!app.config.firecrawlApiKey) {
         return reply.code(400).send({
           error: 'FIRECRAWL_API_KEY is not set (api/.env) — get one at https://www.firecrawl.dev',
@@ -451,7 +451,7 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
     '/generate/topics',
     { schema: { body: SuggestTopicsBodySchema } },
     async (request) => {
-      const provider = getProvider(app.config, request.body.provider);
+      const provider = getProvider(app.config, request.body.provider, request.body.model);
       const existing = (await findAllVideos(app)).map((v) => v.topic);
       const startedAt = Date.now();
       const result = await generateJsonWithRetry(provider, {

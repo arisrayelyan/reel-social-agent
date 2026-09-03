@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Provider, TopicIdea } from '@reel-agent/shared';
+import { CURSOR_BASE_MODELS, DEFAULT_CURSOR_MODEL, type Provider, type TopicIdea } from '@reel-agent/shared';
 import { Button, Card, Pill, SectionLabel } from '@/components/design';
+import { CursorModelSelect } from '@/components/CursorModelSelect';
 import { useVideoMutations } from '@/hooks/useVideoMutations';
 
 // Ollama is temporarily hidden from this page (2 Sep 2026): a qwen3.6 story
@@ -10,6 +11,7 @@ import { useVideoMutations } from '@/hooks/useVideoMutations';
 const PROVIDERS: Array<{ value: Provider; label: string; note: string }> = [
   { value: 'claude-code', label: 'Claude Code', note: 'paid, best quality' },
   { value: 'codex', label: 'Codex', note: 'paid' },
+  { value: 'cursor-agent', label: 'Cursor Agent', note: `paid · ${CURSOR_BASE_MODELS.length} models` },
 ];
 
 type Mode = 'topic' | 'url';
@@ -31,6 +33,7 @@ export function GeneratePage() {
   const navigate = useNavigate();
   const { generateStory, generateFromUrl, suggestTopics } = useVideoMutations();
   const [provider, setProvider] = useState<Provider>('codex');
+  const [cursorModel, setCursorModel] = useState(DEFAULT_CURSOR_MODEL);
   const [mode, setMode] = useState<Mode>('topic');
   const [topic, setTopic] = useState('');
   const [url, setUrl] = useState('');
@@ -41,12 +44,14 @@ export function GeneratePage() {
 
   const urlError = validateUrl(url);
   const starting = generateStory.isPending || generateFromUrl.isPending;
+  // only cursor-agent takes a per-request model; the others are fixed by env
+  const model = provider === 'cursor-agent' ? cursorModel : undefined;
 
   const generate = (chosenTopic: string) => {
     if (!chosenTopic.trim() || starting) return;
     setStartingTopic(chosenTopic);
     generateStory.mutate(
-      { topic: chosenTopic.trim(), provider },
+      { topic: chosenTopic.trim(), provider, model },
       {
         onSuccess: (data) => navigate(`/videos/${data.video.id}`),
         onSettled: () => setStartingTopic(null),
@@ -57,7 +62,7 @@ export function GeneratePage() {
   const generateUrl = () => {
     if (!url.trim() || urlError || starting) return;
     generateFromUrl.mutate(
-      { url: url.trim(), provider },
+      { url: url.trim(), provider, model },
       { onSuccess: (data) => navigate(`/videos/${data.video.id}`) },
     );
   };
@@ -71,7 +76,7 @@ export function GeneratePage() {
     setIdeas([]);
     setDroppedCount(0);
     suggestTopics.mutate(
-      { provider, count: 5 },
+      { provider, model, count: 5 },
       {
         onSuccess: (data) => {
           setIdeas(data.ideas);
@@ -84,7 +89,7 @@ export function GeneratePage() {
   return (
     <div style={{ maxWidth: 760, margin: '0 auto' }}>
       <SectionLabel>Model</SectionLabel>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: provider === 'cursor-agent' ? 10 : 24 }}>
         {PROVIDERS.map((p) => (
           <Card
             key={p.value}
@@ -110,6 +115,15 @@ export function GeneratePage() {
           </Card>
         ))}
       </div>
+
+      {provider === 'cursor-agent' && (
+        <CursorModelSelect
+          value={cursorModel}
+          onChange={setCursorModel}
+          showId
+          style={{ marginBottom: 24 }}
+        />
+      )}
 
       <SectionLabel>Source</SectionLabel>
       <div style={{ display: 'flex', gap: 0, marginBottom: 12 }}>

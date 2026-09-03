@@ -7,6 +7,16 @@ export const VideoStatusSchema = z.enum(VIDEO_STATUSES);
 export const PipelineStepSchema = z.enum(PIPELINE_STEPS);
 export const ProviderSchema = z.enum(PROVIDERS);
 
+/**
+ * Provider-specific model override, sent by every generate route. Only
+ * cursor-agent uses it today — it is the one provider whose model is picked
+ * per-request instead of being fixed by env. Deliberately a free string and
+ * never `z.enum(CURSOR_MODELS)`: the catalogue is regenerated as Cursor ships
+ * and retires ids, and a persisted `generation_runs.model` has to stay
+ * readable afterwards.
+ */
+const ModelOverrideSchema = z.string().min(1).max(120).optional();
+
 export const VideoSchema = z.object({
   id: z.number().int(),
   topic: z.string(),
@@ -43,6 +53,7 @@ export const VideoIdParamSchema = z.object({ id: z.coerce.number().int().positiv
 export const GenerateStoryBodySchema = z.object({
   topic: z.string().min(3).optional(),
   provider: ProviderSchema,
+  model: ModelOverrideSchema,
   /** When regenerating: user's requested changes to the previous version. */
   change_request: z.string().optional(),
   /** When regenerating an existing video. */
@@ -52,6 +63,7 @@ export const GenerateStoryBodySchema = z.object({
 export const GenerateFromUrlBodySchema = z.object({
   url: z.url({ protocol: /^https?$/ }),
   provider: ProviderSchema,
+  model: ModelOverrideSchema,
 });
 
 /**
@@ -75,6 +87,7 @@ export const UpgradeClipsBodySchema = z.object({
 
 export const SuggestTopicsBodySchema = z.object({
   provider: ProviderSchema,
+  model: ModelOverrideSchema,
   count: z.number().int().min(3).max(10).default(5),
 });
 

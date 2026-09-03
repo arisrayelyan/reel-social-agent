@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -5,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { LlmStorySchema, type StoryFinding } from '@reel-agent/shared';
 import { ClaudeCodeProvider } from '../src/llm/claudeCode.js';
 import { CodexProvider } from '../src/llm/codex.js';
+import { CursorAgentProvider } from '../src/llm/cursorAgent.js';
 import { OllamaProvider } from '../src/llm/ollama.js';
 import { generateJsonWithRetry, type LlmProvider } from '../src/llm/index.js';
 import { buildStoryPrompt, storyPromptExamples, storySystem } from '../src/llm/prompts.js';
@@ -35,7 +37,14 @@ import { postProcessStory } from '../src/utils/storyPost.js';
 const RUN = process.env.RUN_EVAL === '1';
 const N = Number(process.env.EVAL_N ?? 3);
 const PROVIDER = process.env.EVAL_PROVIDER ?? 'claude-code';
-const MODEL = process.env.EVAL_MODEL ?? (PROVIDER === 'ollama' ? 'qwen3.6:latest' : 'haiku');
+/** Cheapest capable model per provider — an eval run is many stories. */
+const DEFAULT_EVAL_MODEL: Record<string, string> = {
+  ollama: 'qwen3.6:latest',
+  'claude-code': 'haiku',
+  codex: 'gpt-5.4-mini',
+  'cursor-agent': 'gemini-3.8-flash-medium',
+};
+const MODEL = process.env.EVAL_MODEL ?? DEFAULT_EVAL_MODEL[PROVIDER] ?? 'haiku';
 
 function evalProvider(): LlmProvider {
   switch (PROVIDER) {
@@ -45,8 +54,17 @@ function evalProvider(): LlmProvider {
       return new CodexProvider(process.env.CODEX_CLI_PATH ?? 'codex', 1.25, 10, MODEL);
     case 'claude-code':
       return new ClaudeCodeProvider(process.env.CLAUDE_CLI_PATH ?? 'claude', MODEL);
+    case 'cursor-agent':
+      return new CursorAgentProvider(
+        process.env.CURSOR_CLI_PATH ?? 'cursor-agent',
+        MODEL,
+        {},
+        path.join(os.tmpdir(), 'reel-agent-cursor-eval'),
+      );
     default:
-      throw new Error(`Unknown EVAL_PROVIDER "${PROVIDER}" (ollama | claude-code | codex)`);
+      throw new Error(
+        `Unknown EVAL_PROVIDER "${PROVIDER}" (ollama | claude-code | codex | cursor-agent)`,
+      );
   }
 }
 

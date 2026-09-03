@@ -14,6 +14,7 @@
     "prompt:eval": "cd api && RUN_EVAL=1 pnpm exec vitest run tests/storyEval.test.ts",
     "prompt:rescore": "cd api && pnpm exec tsx scripts/eval-rescore.mts",
     "fal:schema": "cd api && pnpm exec tsx scripts/fal-schema.ts",
+    "cursor:models": "cd api && pnpm exec tsx --env-file-if-exists=.env scripts/cursor-models.mts",
     "migrate": "pnpm --filter @reel-agent/api migrate",
     "migrate:create": "pnpm --filter @reel-agent/api migrate:create",
     "migrate:down": "pnpm --filter @reel-agent/api migrate:down",

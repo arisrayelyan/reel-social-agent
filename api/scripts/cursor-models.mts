@@ -1,0 +1,146 @@
+/**
+ * Regenerates shared/src/cursorModels.ts from the Cursor CLI's own catalogue.
+ *
+ *   pnpm cursor:models
+ *
+ * The list is checked in (the frontend needs it offline, and a persisted
+ * generation_runs.model must stay readable after Cursor retires an id), but it
+ * is never hand-edited — Cursor ships and retires models constantly. Same
+ * spirit as `pnpm fal:schema`: ask the source, don't remember it.
+ *
+ * `--list-models` prints one line per id, and an id is a base model plus its
+ * effort / thinking / fast parameters flattened into a string. This script
+ * unflattens it so the picker can show what Cursor's own picker shows: a short
+ * model list, then the parameters that model supports.
+ *
+ * Free: `--list-models` is a local catalogue read, no inference, no charge.
+ */
+import { execa } from 'execa';
+import path from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { loadConfig } from '../src/config.js';
+import {
+  CURSOR_EFFORTS,
+  CURSOR_POOLS,
+  cursorPoolFor,
+  type CursorBaseModel,
+  type CursorEffort,
+  type CursorModel,
+} from '@reel-agent/shared';
+
+const config = loadConfig();
+const outPath = path.resolve(process.cwd(), '../shared/src/cursorModels.ts');
+
+const { stdout } = await execa(config.cursorCliPath, ['--list-models'], { stdin: 'ignore' });
+
+/** `gpt-5.5` says `extra-high` where every other family says `xhigh`. */
+const EFFORT_ALIASES: Record<string, CursorEffort> = { 'extra-high': 'xhigh' };
+// longest first: `-high` would otherwise match inside `-extra-high` and
+// split gpt-5.5-extra-high into a phantom `gpt-5.5-extra` base model
+const EFFORT_TOKENS = [...CURSOR_EFFORTS, ...Object.keys(EFFORT_ALIASES)].sort(
+  (a, b) => b.length - a.length,
+);
+
+/** Splits an id into its base model and the parameters baked into the suffix. */
+function parseId(id: string): { base: string; effort: CursorEffort | null; thinking: boolean; fast: boolean } {
+  let rest = id;
+  const fast = rest.endsWith('-fast');
+  if (fast) rest = rest.slice(0, -'-fast'.length);
+
+  let thinking = false;
+  const stripThinking = () => {
+    if (rest.endsWith('-thinking')) {
+      rest = rest.slice(0, -'-thinking'.length);
+      thinking = true;
+    }
+  };
+  // `-thinking` sits after the effort on some families (claude-4.6-sonnet-
+  // medium-thinking) and before it on others (claude-opus-5-thinking-high)
+  stripThinking();
+
+  let effort: CursorEffort | null = null;
+  const suffix = EFFORT_TOKENS.find((token) => rest.endsWith(`-${token}`));
+  if (suffix) {
+    effort = EFFORT_ALIASES[suffix] ?? (suffix as CursorEffort);
+    rest = rest.slice(0, -(suffix.length + 1));
+    stripThinking();
+  }
+  return { base: rest, effort, thinking, fast };
+}
+
+// `<id> - <Label>` lines, between an "Available models" header and a "Tip:" footer.
+const models: CursorModel[] = [];
+for (const line of stdout.split('\n')) {
+  const trimmed = line.trim();
+  const sep = trimmed.indexOf(' - ');
+  if (sep === -1 || trimmed.startsWith('Tip:')) continue;
+  const id = trimmed.slice(0, sep);
+  const label = trimmed.slice(sep + 3).trim();
+  if (!/^[a-z0-9][a-z0-9.\-]*$/.test(id) || !label) continue;
+  models.push({ id, label, ...parseId(id) });
+}
+if (models.length === 0) {
+  console.error(`${config.cursorCliPath} --list-models produced no entries:\n${stdout.slice(0, 400)}`);
+  process.exit(1);
+}
+
+/** Longest common prefix of a base model's variant labels — its plain name. */
+function baseLabel(labels: string[]): string {
+  let prefix = labels[0]!;
+  for (const label of labels.slice(1)) {
+    while (prefix && !label.startsWith(prefix)) prefix = prefix.slice(0, -1);
+  }
+  prefix = prefix.replace(/[\s(]+$/, '').trim();
+  // the privacy marker trails the variant suffix, so the prefix loses it
+  return labels.every((l) => l.includes('(NO ZDR)')) ? `${prefix} (NO ZDR)` : prefix;
+}
+
+const bases: CursorBaseModel[] = [];
+for (const model of models) {
+  if (bases.some((b) => b.base === model.base)) continue;
+  const variants = models.filter((m) => m.base === model.base);
+  bases.push({
+    base: model.base,
+    label: baseLabel(variants.map((v) => v.label)),
+    pool: cursorPoolFor(model.id),
+  });
+}
+
+// Pool order for the picker; the CLI's own order is kept inside each pool
+// because it fronts the models Cursor considers current.
+const orderedBases = CURSOR_POOLS.flatMap((pool) => bases.filter((b) => b.pool === pool));
+
+/** Single-quoted to match the codebase; falls back to JSON for awkward text. */
+const lit = (value: string) => (/['\\]/.test(value) ? JSON.stringify(value) : `'${value}'`);
+
+const modelRows = models
+  .map(
+    (m) =>
+      `  { id: ${lit(m.id)}, label: ${lit(m.label)}, base: ${lit(m.base)}, ` +
+      `effort: ${m.effort ? lit(m.effort) : 'null'}, thinking: ${m.thinking}, fast: ${m.fast} },`,
+  )
+  .join('\n');
+
+const baseRows = orderedBases
+  .map((b) => `  { base: ${lit(b.base)}, label: ${lit(b.label)}, pool: ${lit(b.pool)} },`)
+  .join('\n');
+
+await writeFile(
+  outPath,
+  `// GENERATED by \`pnpm cursor:models\` — do not edit by hand.\n` +
+    `// Source: \`${config.cursorCliPath} --list-models\`, ` +
+    `${models.length} ids across ${orderedBases.length} base models.\n` +
+    `import type { CursorBaseModel, CursorModel } from './cursorModelCatalog.js';\n\n` +
+    `/** The short model list the picker shows, in pool order. */\n` +
+    `export const CURSOR_BASE_MODELS: readonly CursorBaseModel[] = [\n${baseRows}\n];\n\n` +
+    `/** Every concrete \`--model\` id, with its parameters unflattened. */\n` +
+    `export const CURSOR_MODELS: readonly CursorModel[] = [\n${modelRows}\n];\n`,
+);
+
+const counts = CURSOR_POOLS.map(
+  (p) => `${p} ${orderedBases.filter((b) => b.pool === p).length}`,
+).join(' · ');
+console.log(
+  `Wrote ${path.relative(process.cwd(), outPath)} — ${models.length} ids, ` +
+    `${orderedBases.length} base models (${counts})`,
+);

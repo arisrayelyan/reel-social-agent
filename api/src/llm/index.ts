@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { Provider } from '@reel-agent/shared';
 import type { AppConfig } from '../config.js';
 import type { GenerateJsonOptions, LlmProvider, LlmResult } from './provider.js';
@@ -5,6 +6,7 @@ import { LlmValidationError } from './provider.js';
 import { OllamaProvider } from './ollama.js';
 import { ClaudeCodeProvider } from './claudeCode.js';
 import { CodexProvider } from './codex.js';
+import { CursorAgentProvider } from './cursorAgent.js';
 
 /**
  * A failure that a retry cannot fix: the CLI is missing, or the call already
@@ -21,18 +23,32 @@ export function isFatalLlmError(err: unknown): boolean {
   );
 }
 
-export function getProvider(config: AppConfig, name: Provider): LlmProvider {
+/**
+ * `model` overrides the provider's configured default for this one call. Only
+ * cursor-agent sends it today — it is the provider whose whole point is the
+ * model menu — but the override is honoured by all of them so the choice stays
+ * a property of the factory rather than a special case in one branch.
+ */
+export function getProvider(config: AppConfig, name: Provider, model?: string): LlmProvider {
   switch (name) {
     case 'ollama':
-      return new OllamaProvider(config.ollamaUrl, config.ollamaModel);
+      return new OllamaProvider(config.ollamaUrl, model || config.ollamaModel);
     case 'claude-code':
-      return new ClaudeCodeProvider(config.claudeCliPath, config.claudeModel);
+      return new ClaudeCodeProvider(config.claudeCliPath, model || config.claudeModel);
     case 'codex':
       return new CodexProvider(
         config.codexCliPath,
         config.codexInputCostPerMTok,
         config.codexOutputCostPerMTok,
-        config.codexModel,
+        model || config.codexModel,
+      );
+    case 'cursor-agent':
+      return new CursorAgentProvider(
+        config.cursorCliPath,
+        model || config.cursorModel,
+        config.cursorPricePerMTok,
+        // empty scratch dir: keeps the repo out of the story prompt
+        path.join(config.storageDir, '.cursor-agent'),
       );
   }
 }

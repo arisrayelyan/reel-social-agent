@@ -135,4 +135,4 @@ export const LOOP_END_FRAME_EDIT_PROMPT =
   'same places. Same photograph, settled. Single image, no text, no labels, ' +
   'no watermark.';
 
-export const PROVIDERS = ['ollama', 'claude-code', 'codex'] as const;
+export const PROVIDERS = ['ollama', 'claude-code', 'codex', 'cursor-agent'] as const;

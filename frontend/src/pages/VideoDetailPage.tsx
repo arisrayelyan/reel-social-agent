@@ -1,12 +1,19 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Asset, Provider } from '@reel-agent/shared';
+import {
+  CURSOR_MODELS,
+  DEFAULT_CURSOR_MODEL,
+  PROVIDERS,
+  type Asset,
+  type Provider,
+} from '@reel-agent/shared';
 import { mediaUrl } from '@/lib/api';
 import { useVideo } from '@/hooks/useVideo';
 import { useVideoEvents } from '@/hooks/useVideoEvents';
 import { useVideoMutations } from '@/hooks/useVideoMutations';
 import { StoryFindings } from '@/components/StoryFindings';
 import { RenderReview } from '@/components/RenderReview';
+import { CursorModelSelect } from '@/components/CursorModelSelect';
 import { Button, Card, Pill, PipelineStrip, SectionLabel, StatusPill } from '@/components/design';
 
 export function VideoDetailPage() {
@@ -17,7 +24,11 @@ export function VideoDetailPage() {
   const { generateStory, approveStory, approveRender, upgradeClips, retry, deleteVideo } =
     useVideoMutations();
   const [changeRequest, setChangeRequest] = useState('');
-  const [regenProvider, setRegenProvider] = useState<Provider>('codex');
+  // null until the producer picks: the controls default to whatever wrote the
+  // draft they are looking at, so "regenerate with changes" does not silently
+  // swap the model out from under a story.
+  const [pickedProvider, setPickedProvider] = useState<Provider | null>(null);
+  const [pickedModel, setPickedModel] = useState<string | null>(null);
 
   const live =
     video?.status === 'draft' || video?.status === 'rendering' || video?.status === 'publishing';
@@ -25,6 +36,18 @@ export function VideoDetailPage() {
 
   if (isLoading) return <Card>Loading…</Card>;
   if (!video) return <Card>Video not found.</Card>;
+
+  const lastScriptRun = video.runs.findLast((r) => r.step === 'script' && r.status !== 'failed');
+  const regenProvider =
+    pickedProvider ??
+    (PROVIDERS.find((p) => p === lastScriptRun?.provider) ?? 'codex');
+  const regenModel =
+    pickedModel ??
+    // a run may name a model Cursor has since retired — fall back rather than
+    // handing the <select> a value none of its options carry
+    (CURSOR_MODELS.some((m) => m.id === lastScriptRun?.model)
+      ? (lastScriptRun!.model as string)
+      : DEFAULT_CURSOR_MODEL);
 
   const byBeat = (kind: Asset['kind'], beatIndex: number) =>
     video.assets.filter((a) => a.kind === kind && a.beat_index === beatIndex);
@@ -179,18 +202,35 @@ export function VideoDetailPage() {
             style={{ width: '100%', resize: 'vertical', marginBottom: 10 }}
           />
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <select value={regenProvider} onChange={(e) => setRegenProvider(e.target.value as Provider)}>
+            <select
+              aria-label="Regenerate with"
+              value={regenProvider}
+              onChange={(e) => setPickedProvider(e.target.value as Provider)}
+            >
               <option value="ollama">Ollama · qwen3.6</option>
               <option value="claude-code">Claude Code</option>
               <option value="codex">Codex</option>
+              <option value="cursor-agent">Cursor Agent</option>
             </select>
+            {regenProvider === 'cursor-agent' && (
+              <CursorModelSelect
+                value={regenModel}
+                onChange={setPickedModel}
+                style={{ flex: '0 1 260px', minWidth: 0 }}
+              />
+            )}
             <Button
               variant="ghost"
               disabled={!changeRequest.trim()}
               busy={generateStory.isPending}
               onClick={() =>
                 generateStory.mutate(
-                  { video_id: video.id, provider: regenProvider, change_request: changeRequest },
+                  {
+                    video_id: video.id,
+                    provider: regenProvider,
+                    model: regenProvider === 'cursor-agent' ? regenModel : undefined,
+                    change_request: changeRequest,
+                  },
                   { onSuccess: () => setChangeRequest('') },
                 )
               }

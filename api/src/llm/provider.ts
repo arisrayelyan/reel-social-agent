@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import type { Provider } from '@reel-agent/shared';
 
 export interface LlmResult<T> {
   data: T;
@@ -16,7 +17,7 @@ export interface GenerateJsonOptions<T> {
 }
 
 export interface LlmProvider {
-  readonly name: 'ollama' | 'claude-code' | 'codex';
+  readonly name: Provider;
   generateJson<T>(opts: GenerateJsonOptions<T>): Promise<LlmResult<T>>;
 }
 

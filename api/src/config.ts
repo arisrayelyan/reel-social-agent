@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_CURSOR_MODEL } from '@reel-agent/shared';
 import { parseCostMap } from './clients/falModels.js';
+import { parseCursorPriceMap, type CursorPrice } from './llm/cursorPricing.js';
 
 export interface AppConfig {
   port: number;
@@ -20,6 +22,11 @@ export interface AppConfig {
   codexModel: string;
   codexInputCostPerMTok: number;
   codexOutputCostPerMTok: number;
+  cursorCliPath: string;
+  /** Fallback model; the Generate page overrides it per request. */
+  cursorModel: string;
+  /** Model-id prefix → $/1M tokens, overriding the built-in family table. */
+  cursorPricePerMTok: Record<string, CursorPrice>;
   geminiApiKey: string;
   geminiImageModel: string;
   geminiImageCostUsd: number;
@@ -104,6 +111,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     codexModel: env.CODEX_MODEL ?? 'gpt-5.6-luna',
     codexInputCostPerMTok: Number(env.CODEX_INPUT_COST_PER_MTOK ?? 1.25),
     codexOutputCostPerMTok: Number(env.CODEX_OUTPUT_COST_PER_MTOK ?? 10),
+    cursorCliPath: env.CURSOR_CLI_PATH ?? 'cursor-agent',
+    cursorModel: env.CURSOR_MODEL ?? DEFAULT_CURSOR_MODEL,
+    cursorPricePerMTok: parseCursorPriceMap(env.CURSOR_PRICE_PER_MTOK_MAP),
     geminiApiKey: env.GEMINI_API_KEY ?? '',
     geminiImageModel: env.GEMINI_IMAGE_MODEL ?? 'gemini-2.5-flash-image',
     geminiImageCostUsd: Number(env.GEMINI_IMAGE_COST_USD ?? 0.039),

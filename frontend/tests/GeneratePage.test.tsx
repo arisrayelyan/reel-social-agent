@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
+import { CURSOR_BASE_MODELS, DEFAULT_CURSOR_MODEL } from '@reel-agent/shared';
 import { api } from '@/lib/api';
 import { GeneratePage } from '@/pages/GeneratePage';
 
@@ -109,5 +110,101 @@ describe('GeneratePage', () => {
       topic: 'The lighthouse that vanished',
       provider: 'codex',
     });
+  });
+  it('reveals the Cursor model picker only when Cursor Agent is selected', () => {
+    renderPage();
+    expect(screen.queryByLabelText('Cursor model')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Cursor Agent'));
+    const select = screen.getByLabelText('Cursor model');
+    // the short model list, not the ~217-id grid flattened
+    expect(select.querySelectorAll('option')).toHaveLength(CURSOR_BASE_MODELS.length);
+    expect(select).toHaveValue('claude-opus-5');
+    expect(screen.getByText(DEFAULT_CURSOR_MODEL)).toBeInTheDocument();
+    expect([...select.querySelectorAll('optgroup')].map((g) => g.label)).toEqual([
+      'Cursor Models',
+      'Other Models',
+    ]);
+
+    fireEvent.click(screen.getByText('Codex'));
+    expect(screen.queryByLabelText('Cursor model')).not.toBeInTheDocument();
+  });
+
+  it('offers only the parameters the selected model actually has', () => {
+    renderPage();
+    fireEvent.click(screen.getByText('Cursor Agent'));
+    // Claude Opus 5: five effort rungs, thinking and fast
+    expect(screen.getByLabelText('Effort')).toBeInTheDocument();
+    expect(screen.getByLabelText('Thinking')).toBeInTheDocument();
+    expect(screen.getByLabelText('Fast')).toBeInTheDocument();
+
+    // Composer 2.5 has no effort rungs and no thinking mode, but does have fast
+    fireEvent.change(screen.getByLabelText('Cursor model'), { target: { value: 'composer-2.5' } });
+    expect(screen.queryByLabelText('Effort')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Thinking')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Fast')).toBeInTheDocument();
+
+    // Gemini 3.8 Flash has effort rungs but no fast tier
+    fireEvent.change(screen.getByLabelText('Cursor model'), { target: { value: 'gemini-3.8-flash' } });
+    expect(screen.getByLabelText('Effort')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Fast')).not.toBeInTheDocument();
+  });
+
+  it('resolves model plus parameters to a real catalogue id', () => {
+    renderPage();
+    fireEvent.click(screen.getByText('Cursor Agent'));
+    fireEvent.click(screen.getByLabelText('Fast'));
+    expect(screen.getByText('claude-opus-5-thinking-high-fast')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Thinking'));
+    expect(screen.getByText('claude-opus-5-high-fast')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Effort'), { target: { value: 'low' } });
+    expect(screen.getByText('claude-opus-5-low-fast')).toBeInTheDocument();
+  });
+
+  it('drops parameters the next model cannot honour instead of naming a fake id', () => {
+    renderPage();
+    fireEvent.click(screen.getByText('Cursor Agent'));
+    fireEvent.click(screen.getByLabelText('Fast'));
+    expect(screen.getByText('claude-opus-5-thinking-high-fast')).toBeInTheDocument();
+
+    // Gemini has neither thinking nor a fast tier — both preferences are dropped
+    fireEvent.change(screen.getByLabelText('Cursor model'), { target: { value: 'gemini-3.8-flash' } });
+    expect(screen.getByText('gemini-3.8-flash-high')).toBeInTheDocument();
+  });
+
+  it('sends the resolved cursor model with the story request', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { video: { id: 11 } } });
+    renderPage();
+    fireEvent.click(screen.getByText('Cursor Agent'));
+    fireEvent.change(screen.getByLabelText('Cursor model'), { target: { value: 'gemini-3.8-flash' } });
+    fireEvent.change(screen.getByLabelText('Effort'), { target: { value: 'low' } });
+    fireEvent.change(screen.getByPlaceholderText(/A true story/), {
+      target: { value: 'The lake that killed a valley' },
+    });
+    fireEvent.click(screen.getByText('Generate story'));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/videos/11'));
+    expect(api.post).toHaveBeenCalledWith('/api/generate/story', {
+      topic: 'The lake that killed a valley',
+      provider: 'cursor-agent',
+      model: 'gemini-3.8-flash-low',
+    });
+  });
+
+  it('omits model entirely for the providers whose model is fixed by env', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { video: { id: 12 } } });
+    renderPage();
+    fireEvent.click(screen.getByText('Claude Code'));
+    fireEvent.change(screen.getByPlaceholderText(/A true story/), {
+      target: { value: 'The lake that killed a valley' },
+    });
+    fireEvent.click(screen.getByText('Generate story'));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/videos/12'));
+    const body = vi.mocked(api.post).mock.calls[0]![1] as { provider: string; model?: string };
+    expect(body).toMatchObject({ provider: 'claude-code' });
+    expect(body.model).toBeUndefined();
   });
 });
