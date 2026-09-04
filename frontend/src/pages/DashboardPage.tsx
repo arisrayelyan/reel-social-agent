@@ -1,11 +1,71 @@
 import { Link } from 'react-router-dom';
+import { Trash2 } from 'lucide-react';
 import { useVideos } from '@/hooks/useVideos';
 import { useStats } from '@/hooks/useStats';
+import { useVideoMutations } from '@/hooks/useVideoMutations';
 import { Card, PipelineStrip, SectionLabel, Stat, StatusPill } from '@/components/design';
+
+/**
+ * Row-level delete.
+ *
+ * Deliberately OUTSIDE the row's <Link>: a <button> inside an <a> is invalid
+ * markup, and a click on it would navigate as well as delete. Kept quiet at
+ * --text-3 (the same dim as the hook line) and warming to --warn only on hover
+ * or focus — a destructive control in a dense list should be discoverable
+ * without competing with the status pill for attention.
+ */
+function DeleteRowButton({
+  topic,
+  busy,
+  onConfirm,
+}: {
+  topic: string;
+  busy: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={`Delete ${topic}`}
+      title="Delete video"
+      disabled={busy}
+      onClick={() => {
+        // same wording as the detail page, so the action reads the same
+        // wherever it is invoked
+        if (window.confirm(`Delete "${topic}" and all its assets?`)) onConfirm();
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.color = 'var(--warn)';
+        e.currentTarget.style.borderColor = 'var(--warn)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.color = 'var(--text-3)';
+        e.currentTarget.style.borderColor = 'var(--line)';
+      }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 38,
+        alignSelf: 'stretch',
+        background: 'var(--bg-1)',
+        color: 'var(--text-3)',
+        border: '1px solid var(--line)',
+        borderRadius: 8,
+        cursor: busy ? 'not-allowed' : 'pointer',
+        opacity: busy ? 0.5 : 1,
+        flexShrink: 0,
+      }}
+    >
+      <Trash2 size={15} />
+    </button>
+  );
+}
 
 export function DashboardPage() {
   const { data: videos, isLoading } = useVideos();
   const { data: stats } = useStats();
+  const { deleteVideo } = useVideoMutations();
 
   const rendering = stats?.by_status.rendering ?? 0;
   const awaitingReview = (stats?.by_status.story_review ?? 0) + (stats?.by_status.render_review ?? 0);
@@ -36,46 +96,53 @@ export function DashboardPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {videos.map((video) => (
-            <Link key={video.id} to={`/videos/${video.id}`}>
-              <Card
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(220px, 1fr) 230px 110px 90px',
-                  gap: 16,
-                  alignItems: 'center',
-                  padding: '12px 16px',
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontWeight: 600,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {video.topic}
+            <div key={video.id} style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+              <Link to={`/videos/${video.id}`} style={{ flex: 1, minWidth: 0 }}>
+                <Card
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(220px, 1fr) 230px 110px 90px',
+                    gap: 16,
+                    alignItems: 'center',
+                    padding: '12px 16px',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {video.topic}
+                    </div>
+                    <div
+                      style={{
+                        color: 'var(--text-3)',
+                        fontSize: 12,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {video.hook}
+                    </div>
                   </div>
-                  <div
-                    style={{
-                      color: 'var(--text-3)',
-                      fontSize: 12,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {video.hook}
+                  <PipelineStrip video={video} />
+                  <StatusPill status={video.status} />
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, textAlign: 'right', color: 'var(--text-2)' }}>
+                    ${Number(video.total_cost_usd).toFixed(2)}
                   </div>
-                </div>
-                <PipelineStrip video={video} />
-                <StatusPill status={video.status} />
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, textAlign: 'right', color: 'var(--text-2)' }}>
-                  ${Number(video.total_cost_usd).toFixed(2)}
-                </div>
-              </Card>
-            </Link>
+                </Card>
+              </Link>
+              <DeleteRowButton
+                topic={video.topic}
+                busy={deleteVideo.isPending && deleteVideo.variables === video.id}
+                onConfirm={() => deleteVideo.mutate(video.id)}
+              />
+            </div>
           ))}
         </div>
       )}
