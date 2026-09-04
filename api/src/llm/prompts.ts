@@ -3,12 +3,14 @@ import { readFileSync } from 'node:fs';
 import {
   HOOK_EXAMPLE_POOL,
   HOOK_UPGRADE_PAIRS,
+  MUSIC_GENRES,
   SLOP_PHRASES_PROMPT_SAMPLE,
   TARGET_DURATION_SECONDS,
   TARGET_WORD_COUNT,
   WORDS_PER_MINUTE,
   type HookExample,
   type HookUpgrade,
+  type SourceImage,
 } from '@reel-agent/shared';
 
 /**
@@ -23,6 +25,7 @@ const PROMPT_FILES = [
   'story.change-request.md',
   'topics.system.md',
   'topics.user.md',
+  'source-images.user.md',
 ] as const;
 export type PromptName = (typeof PROMPT_FILES)[number];
 
@@ -156,7 +159,8 @@ export function buildStoryPrompt(
 ): string {
   const sourceBlock = sourceMaterial
     ? `\nSOURCE MATERIAL (scraped from the web — your ONLY source of facts):\n` +
-      `Base every fact, number and name strictly on the material below. If a detail is not in it, leave it out — never fill gaps from memory.\n\n` +
+      `Base every fact, number and name strictly on the material below. If a detail is not in it, leave it out — never fill gaps from memory.\n` +
+      `If the material ends with PHOTO NOTES, those describe the real photographs of the event: take geography, structures, vehicles, clothing, materials, colours and weather for the style_prefix and for every image_prompt from them — they outrank your memory. Never describe a named person's face.\n\n` +
       `<source_material>\n${sourceMaterial}\n</source_material>\n`
     : '';
   return renderTemplate(loadPrompt(promptsDir, 'story.user.md'), {
@@ -170,6 +174,26 @@ export function buildStoryPrompt(
     min_seconds: TARGET_DURATION_SECONDS.min,
     max_seconds: TARGET_DURATION_SECONDS.max,
     wpm: WORDS_PER_MINUTE,
+    music_genres: MUSIC_GENRES.join(', '),
+  });
+}
+
+/** Short system line for the vision pass; the whole brief is in the user template. */
+export function sourceImagesSystem(): string {
+  return (
+    'You are a photo analyst for a documentary reconstruction team. You report only what is physically visible, ' +
+    'in plain concrete nouns, and you respond with a single JSON object and nothing else — raw JSON, no markdown fences.'
+  );
+}
+
+export function buildSourceImagesPrompt(promptsDir: string, images: SourceImage[]): string {
+  const captions = images
+    .map((img, i) => `${i + 1}. ${img.alt || img.context || '(no caption)'}`)
+    .join('\n');
+  return renderTemplate(loadPrompt(promptsDir, 'source-images.user.md'), {
+    count: images.length,
+    page_url: images[0]?.page_url ?? '',
+    captions,
   });
 }
 

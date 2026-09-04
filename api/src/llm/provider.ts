@@ -14,6 +14,20 @@ export interface GenerateJsonOptions<T> {
   system: string;
   prompt: string;
   schema: z.ZodType<T>;
+  /**
+   * Absolute paths of images to attach (source-photo analysis). Each CLI has
+   * its own way in — codex `-i`, cursor-agent a workspace file, claude the Read
+   * tool — and Ollama throws UnsupportedImagesError so the caller can skip.
+   */
+  images?: string[];
+}
+
+/** The provider cannot take image input; callers treat it as "skip", not "retry". */
+export class UnsupportedImagesError extends Error {
+  constructor(provider: string) {
+    super(`${provider} cannot take image input`);
+    this.name = 'UnsupportedImagesError';
+  }
 }
 
 export interface LlmProvider {

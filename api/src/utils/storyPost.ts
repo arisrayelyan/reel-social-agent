@@ -8,10 +8,12 @@ import {
   OVERLAY_HOOK_MAX_CHARS,
   OVERLAY_HOOK_MAX_WORDS,
   RULE_EXHIBIT_TAG_SHORTENED,
+  RULE_MUSIC_DERIVED,
   RULE_STAMP_SHORTENED,
   WORDS_PER_MINUTE,
   sortFindings,
   type LlmStory,
+  type Music,
   type Story,
   type StoryFinding,
 } from '@reel-agent/shared';
@@ -58,6 +60,41 @@ export function deriveOverlayHook(hook: string): string {
     .slice(0, OVERLAY_HOOK_MAX_WORDS)
     .join(' ');
   return shortenToChars(capped, OVERLAY_HOOK_MAX_CHARS);
+}
+
+/**
+ * Keyword fallback for the post-time music suggestion, used only when the
+ * model omitted or mangled `music`. Coarse on purpose — it exists so an old
+ * story row or a sloppy output still gets a usable suggestion, and the
+ * `music.derived` warning tells the producer it was not the model's pick.
+ * First matching family wins; order is specificity.
+ */
+const MUSIC_FALLBACKS: Array<{ re: RegExp; music: Music }> = [
+  {
+    re: /\b(haunt|ghost|vanish|disappear|unexplained|curse|mystery|myster|possess|séance|seance|unsolved)/i,
+    music: { genre: 'horror', search_terms: ['eerie drone', 'horror ambience no drums', 'slow dread build'] },
+  },
+  {
+    re: /\b(heist|fraud|robber|steal|stole|forger|smuggl|con man|swindl|counterfeit|spy|espionage|assassin|murder)/i,
+    music: { genre: 'suspense thriller', search_terms: ['tense pulse', 'thriller underscore', 'ticking suspense'] },
+  },
+  {
+    re: /\b(rescue|surviv|escape|against the odds|saved|miracle|record|first ever|won|victory)/i,
+    music: { genre: 'cinematic orchestral', search_terms: ['cinematic build', 'orchestral swell', 'hopeful strings'] },
+  },
+  {
+    re: /\b(dead|died|death|kill|toxic|poison|disaster|eruption|erupt|collapse|flood|drown|plague|famine|crash|explode|explosion|wiped out|buried)/i,
+    music: { genre: 'dark ambient', search_terms: ['dark ambient drone', 'low tension pad', 'somber atmosphere'] },
+  },
+];
+const DEFAULT_MUSIC: Music = {
+  genre: 'tension',
+  search_terms: ['slow tension build', 'documentary underscore', 'suspense pad'],
+};
+
+export function deriveMusic(story: Pick<LlmStory, 'topic' | 'hook' | 'beats'>): Music {
+  const text = [story.topic, story.hook, ...story.beats.map((b) => b.narration)].join(' ');
+  return MUSIC_FALLBACKS.find((f) => f.re.test(text))?.music ?? DEFAULT_MUSIC;
 }
 
 /** Cuts on a word boundary so an on-screen cap never slices mid-word. */
@@ -154,7 +191,23 @@ export function postProcessStory(
     evidence_stamp = shortened;
   }
 
-  const story: Story = { ...raw, overlay_hook, evidence_stamp, beats };
+  // `music` is a post-time suggestion, never a render input, so a missing or
+  // mangled value (LlmMusicSchema collapses any failure to undefined) costs a
+  // keyword fallback and a warning — never a paid retry.
+  let music = raw.music;
+  if (!music) {
+    music = deriveMusic(raw);
+    findings.push({
+      rule: RULE_MUSIC_DERIVED,
+      severity: 'warning',
+      field: 'music',
+      beat_index: null,
+      detail: `No usable music suggestion from the model — picked "${music.genre}" from story keywords. Weaker than a pick made for the story's register.`,
+      evidence: music.genre,
+    });
+  }
+
+  const story: Story = { ...raw, overlay_hook, evidence_stamp, music, beats };
   findings.push(
     ...validateStory(story, {
       promptExamples: opts.promptExamples,

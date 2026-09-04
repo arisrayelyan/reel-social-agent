@@ -18,7 +18,7 @@ pnpm monorepo
 Pipeline per video (each step idempotent, keyed by content hash — retries never regenerate paid assets):
 
 ```
-topic or URL (Firecrawl scrapes the page + the pages it mentions)
+topic or URL (Firecrawl scrapes the page's main content; its photos are described by the story model)
   → script (Ollama / Claude Code / Codex / Cursor Agent) → [you approve the story]
   → tts (per beat, measures real durations)
   → images (Nano Banana, byte-identical style prefix)
@@ -85,7 +85,8 @@ Open http://localhost:4040. The Settings page shows live health for every servic
 | `FAL_KEY` | fal.ai image-to-video | https://fal.ai/dashboard/keys |
 | `FAL_VIDEO_MODEL` | i2v endpoint | default `minimax/h3-max/image-to-video` |
 | `FIRECRAWL_API_KEY` | generate-from-URL scraping | https://www.firecrawl.dev → dashboard → API Keys (`fc-…`) |
-| `FIRECRAWL_MAX_LINKED_PAGES` | linked pages also scraped per article | default `4` (each page = 1 credit ≈ $0.005) |
+| `FIRECRAWL_MAX_LINKED_PAGES` | linked pages also scraped per article | default `0` = main URL only (each extra page = 1 credit ≈ $0.005) |
+| `FIRECRAWL_MAX_SOURCE_IMAGES` / `SOURCE_IMAGE_ANALYSIS` | photos taken from the page's main content and described by the story provider for the image prompts | defaults `4` / `true` |
 | `OLLAMA_URL` / `OLLAMA_MODEL` / `OLLAMA_EMBED_MODEL` | free local LLM + embeddings | `http://localhost:11434`, `qwen3.6:latest`, `qwen3-embedding:0.6b` |
 | `CLAUDE_CLI_PATH` / `CODEX_CLI_PATH` / `CURSOR_CLI_PATH` | CLI story generators | `claude` / `codex` / `cursor-agent` (uses your existing logins) |
 | `CURSOR_MODEL` / `CURSOR_PRICE_PER_MTOK_MAP` | fallback Cursor model + cost estimate overrides | `claude-opus-5-thinking-high`; the Generate page picks model + effort per request |

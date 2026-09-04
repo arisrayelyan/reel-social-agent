@@ -93,5 +93,5 @@ export function buildRepairInstruction(err: unknown): string {
   return `Your previous response was not valid JSON matching the schema (${reason}). Respond again with ONLY the corrected JSON object.`;
 }
 
-export { extractJson, parseWithSchema, LlmValidationError } from './provider.js';
+export { extractJson, parseWithSchema, LlmValidationError, UnsupportedImagesError } from './provider.js';
 export type { LlmProvider, LlmResult, GenerateJsonOptions } from './provider.js';

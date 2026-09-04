@@ -24,13 +24,21 @@ export class ClaudeCodeProvider implements LlmProvider {
   ) {}
 
   async generateJson<T>(opts: GenerateJsonOptions<T>): Promise<LlmResult<T>> {
-    const prompt = `${opts.system}\n\n${opts.prompt}`;
+    const images = opts.images ?? [];
+    // Images go in by path: the model opens them with its Read tool, which
+    // has to be pre-approved because print mode cannot answer a permission
+    // prompt.
+    const imageBlock = images.length
+      ? `\n\nATTACHED IMAGES (open each with the Read tool before answering):\n${images.map((f, i) => `${i + 1}. ${f}`).join('\n')}`
+      : '';
+    const prompt = `${opts.system}\n\n${opts.prompt}${imageBlock}`;
     const { stdout } = await execa(
       this.cliPath,
       [
         '-p', prompt,
         '--output-format', 'json',
         ...(this.model ? ['--model', this.model] : []),
+        ...(images.length ? ['--allowedTools', 'Read'] : []),
       ],
       { timeout: 900_000 },
     );

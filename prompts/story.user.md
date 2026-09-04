@@ -109,5 +109,6 @@ Also produce:
 - exhibit_tag — optional, only on a map or diagram beat: a short uppercase tag of two or three words, maximum 24 characters.
 - title — specific, not clickbait.
 - tiktok_caption — first line under 100 characters, a curiosity gap that does NOT spoil the reveal, then 3-5 relevant hashtags.
+- music — genre EXACTLY one of: {{music_genres}}. Music is added inside TikTok when posting, so this is advice for the producer: pick for the story's emotional register, not its era. search_terms: 2-4 short phrases a producer can type into TikTok's sound search, describing energy and texture rather than a song. note: optional, one line on tempo and where the music should release.
 
 Respond with ONLY the JSON object.

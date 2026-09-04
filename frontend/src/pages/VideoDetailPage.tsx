@@ -14,6 +14,8 @@ import { useVideoMutations } from '@/hooks/useVideoMutations';
 import { StoryFindings } from '@/components/StoryFindings';
 import { RenderReview } from '@/components/RenderReview';
 import { CursorModelSelect } from '@/components/CursorModelSelect';
+import { PublishKit } from '@/components/PublishKit';
+import { SourcePhotos } from '@/components/SourcePhotos';
 import { Button, Card, Pill, PipelineStrip, SectionLabel, StatusPill } from '@/components/design';
 
 export function VideoDetailPage() {
@@ -188,7 +190,13 @@ export function VideoDetailPage() {
               </a>
             </div>
           )}
+          <SourcePhotos images={video.source_images} />
           <StoryFindings findings={video.story_findings} />
+          {video.story && (
+            <div style={{ marginBottom: 16 }}>
+              <PublishKit story={video.story} />
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
             <Button variant="go" busy={approveStory.isPending} onClick={() => approveStory.mutate(video.id)}>
               Approve story — start render
@@ -277,25 +285,7 @@ export function VideoDetailPage() {
                   <Button variant="primary">Download final video</Button>
                 </a>
               )}
-              {video.story?.tiktok_caption && (
-                <div>
-                  <SectionLabel>Suggested caption</SectionLabel>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: 'var(--text-2)',
-                      background: 'var(--bg-0)',
-                      border: '1px solid var(--line)',
-                      borderRadius: 6,
-                      padding: 10,
-                      maxWidth: 420,
-                      userSelect: 'all',
-                    }}
-                  >
-                    {video.story.tiktok_caption}
-                  </div>
-                </div>
-              )}
+              {video.story && <PublishKit story={video.story} />}
             </div>
           </div>
         </Card>

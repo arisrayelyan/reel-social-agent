@@ -208,6 +208,30 @@ export const BEAT_ROLES = [
   'kicker',
 ] as const;
 
+/**
+ * Music genre vocabulary for the post-time sound suggestion. Music is added
+ * inside TikTok when posting (the render stays silent under narration); the
+ * story model picks one of these for the story's emotional register and the
+ * producer reads it next to the caption. `as const` so the story schema, the
+ * prompt and the UI share one list.
+ */
+export const MUSIC_GENRES = [
+  'horror',
+  'dark ambient',
+  'tension',
+  'suspense thriller',
+  'melancholic piano',
+  'cinematic orchestral',
+  'documentary ambient',
+  'industrial',
+  'phonk',
+  'lo-fi',
+  'synthwave',
+  'folk acoustic',
+  'triumphant',
+] as const;
+export type MusicGenre = (typeof MUSIC_GENRES)[number];
+
 export const ASSET_KINDS = [
   'keyframe',
   /** Kicker end frame, so the reel's last frame is deterministic and loopable. */

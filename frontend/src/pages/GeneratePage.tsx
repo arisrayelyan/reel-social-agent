@@ -199,7 +199,7 @@ export function GeneratePage() {
             <div style={{ color: 'var(--warn)', fontSize: 12, marginBottom: 6 }}>{urlError}</div>
           )}
           <div style={{ color: 'var(--text-3)', fontSize: 11, fontFamily: 'var(--font-mono)', marginBottom: 12 }}>
-            The page is scraped with Firecrawl — plus a few pages it links to — and the script is written from that material only.
+            Firecrawl reads the page's main content and the photos in it. The photos are described by the story model to ground the image prompts, and the script is written from that material only.
           </div>
           <Button
             variant="primary"

@@ -4,6 +4,7 @@ export * from './cursorModels.js';
 export * from './schemas/story.js';
 export * from './schemas/storyFindings.js';
 export * from './schemas/video.js';
+export * from './schemas/sourceImage.js';
 export * from './schemas/asset.js';
 export * from './schemas/generationRun.js';
 export * from './schemas/publication.js';

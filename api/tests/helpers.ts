@@ -65,6 +65,7 @@ export function storyFixture(overrides: Partial<Story> = {}): Story {
     hook: 'A lake killed a valley overnight — silently.',
     title: 'The Lake That Exploded',
     tiktok_caption: 'The lake that killed a valley #history #wtf #truestory',
+    music: { genre: 'dark ambient', search_terms: ['dark ambient drone', 'low tension pad'] },
     style_prefix:
       'nineteen eighties documentary photography, West African highland region, red laterite soil, overcast diffuse morning light, muted 35mm film stock, vertical 9:16 composition, cinematic',
     // one distinct in-frame action per beat, and nothing camera-locked:

@@ -94,6 +94,7 @@ const HARD_RULES: Array<{ name: string; re: RegExp }> = [
   { name: 'overlay hook <= 8 words', re: /maximum 8 words/ },
   { name: 'evidence stamp', re: /evidence_stamp/ },
   { name: 'caption fold', re: /under 100 characters/ },
+  { name: 'music genre from the list', re: /music — genre EXACTLY one of/ },
   { name: 'derived fields omitted', re: /Do NOT output index, word_count or duration_seconds/ },
   // render caps — a cap the model can't know about is a paid schema retry
   // (observed 2 Sep 2026: a 59-char evidence_stamp burned two codex calls)
@@ -110,6 +111,7 @@ const SYSTEM_CONTRACT: Array<{ name: string; re: RegExp }> = [
   { name: 'camera_locked on every beat', re: /"camera_locked" must be present on EVERY beat/ },
   { name: 'no markdown fences', re: /no markdown fences/ },
   { name: 'no extra keys', re: /Do not add any keys beyond these/ },
+  { name: 'music key in skeleton', re: /"music": \{/ },
 ];
 
 describe('story prompt still states every hard rule', () => {

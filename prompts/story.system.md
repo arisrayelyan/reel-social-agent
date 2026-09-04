@@ -21,6 +21,11 @@ OUTPUT FORMAT — exactly this shape, every key spelled exactly as shown:
   "evidence_stamp": "PLACE, REGION — MONTH YEAR",
   "title": "specific, not clickbait",
   "tiktok_caption": "curiosity-gap line then hashtags",
+  "music": {
+    "genre": "one genre from the list in the brief",
+    "search_terms": ["2-4 TikTok sound search terms"],
+    "note": "optional one line on energy and tempo"
+  },
   "style_prefix": "one reusable style line for this story",
   "beats": [
     {

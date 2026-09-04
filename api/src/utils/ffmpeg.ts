@@ -21,6 +21,22 @@ export async function probeDuration(filePath: string): Promise<number> {
   return duration;
 }
 
+/** Pixel dimensions of an image (or the first video stream) via ffprobe. */
+export async function probeImageSize(filePath: string): Promise<{ width: number; height: number }> {
+  const { stdout } = await execa('ffprobe', [
+    '-v', 'error',
+    '-select_streams', 'v:0',
+    '-show_entries', 'stream=width,height',
+    '-of', 'csv=p=0',
+    filePath,
+  ]);
+  const [w, h] = stdout.trim().split(',').map(Number);
+  if (!w || !h || !Number.isFinite(w) || !Number.isFinite(h)) {
+    throw new Error(`ffprobe returned invalid dimensions for ${filePath}: ${stdout}`);
+  }
+  return { width: w, height: h };
+}
+
 /**
  * Every segment that reaches the concat demuxer MUST share these settings:
  * merge concatenates with `-c copy`, which is only valid because each segment

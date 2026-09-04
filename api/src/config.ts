@@ -62,8 +62,13 @@ export interface AppConfig {
   /** Per-model $/s so the dashboard stays honest across tiers. */
   falCostPerSecondUsdMap: Record<string, number>;
   firecrawlApiKey: string;
+  /** 0 = the given URL's main content only (default since 4 Sep 2026). */
   firecrawlMaxLinkedPages: number;
   firecrawlCostPerPageUsd: number;
+  /** Photos taken from the source page's main content and described for the story model. */
+  firecrawlMaxSourceImages: number;
+  /** Emergency off-switch for the vision pass over source photos. */
+  sourceImageAnalysis: boolean;
   ttsUrl: string;
   /**
    * Delivery pace sent with every /synthesize call and folded into the TTS
@@ -140,8 +145,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     falCostPerSecondUsd: Number(env.FAL_COST_PER_SECOND_USD ?? 0.08),
     falCostPerSecondUsdMap: parseCostMap(env.FAL_COST_PER_SECOND_USD_MAP),
     firecrawlApiKey: env.FIRECRAWL_API_KEY ?? '',
-    firecrawlMaxLinkedPages: Number(env.FIRECRAWL_MAX_LINKED_PAGES ?? 4),
+    firecrawlMaxLinkedPages: Number(env.FIRECRAWL_MAX_LINKED_PAGES ?? 0),
     firecrawlCostPerPageUsd: Number(env.FIRECRAWL_COST_PER_PAGE_USD ?? 0.005),
+    firecrawlMaxSourceImages: Number(env.FIRECRAWL_MAX_SOURCE_IMAGES ?? 4),
+    sourceImageAnalysis: (env.SOURCE_IMAGE_ANALYSIS ?? 'true') !== 'false',
     ttsUrl: env.TTS_URL ?? 'http://localhost:4042',
     ttsTargetWpm: Number(env.TTS_TARGET_WPM ?? 152),
     ttsSentenceGapSeconds: Number(env.TTS_SENTENCE_GAP_SECONDS ?? 0.35),

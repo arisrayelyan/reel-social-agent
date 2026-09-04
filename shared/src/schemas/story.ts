@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BEAT_ROLES } from '../constants.js';
+import { BEAT_ROLES, MUSIC_GENRES } from '../constants.js';
 
 /**
  * One storyboard beat. narration must be TTS-ready: numbers written out as
@@ -25,6 +25,23 @@ export const BeatSchema = z.object({
   exhibit_tag: z.string().min(2).max(24).optional(),
 });
 
+
+/**
+ * Post-time sound suggestion. Music is added inside TikTok when posting, so
+ * this never touches the render — it is advice for the producer, shown next
+ * to the caption. Optional for the same reason as overlay_hook: worker.ts
+ * hard-parses every historical videos.story row, and postProcessStory derives
+ * a fallback when the model omits it.
+ */
+export const MusicSchema = z.object({
+  genre: z.enum(MUSIC_GENRES),
+  /** 1-4 phrases a producer can type into TikTok's sound search. */
+  search_terms: z.array(z.string().min(2).max(40)).min(1).max(4),
+  /** One line on energy/tempo, e.g. "slow drone, no drums, release at the reveal". */
+  note: z.string().max(120).optional(),
+});
+export type Music = z.infer<typeof MusicSchema>;
+
 export const StorySchema = z.object({
   topic: z.string().min(3),
   hook: z.string().min(5),
@@ -44,6 +61,7 @@ export const StorySchema = z.object({
   evidence_stamp: z.string().min(4).max(48).optional(),
   title: z.string().min(3),
   tiktok_caption: z.string().min(3),
+  music: MusicSchema.optional(),
   /** Geography/era-specific style prefix for this story, byte-identical across beats. */
   style_prefix: z.string().min(20),
   /**
@@ -94,10 +112,26 @@ export const LlmBeatSchema = BeatSchema.partial({
   ),
   exhibit_tag: z.string().min(2).max(64).optional(),
 });
+
+/**
+ * Loose twin of MusicSchema for the LLM: the genre is lowercased/trimmed
+ * before the enum, and ANY failure collapses to undefined instead of failing
+ * the story — a wrong genre string is a `music.derived` warning, never a paid
+ * retry (postProcessStory fills the fallback).
+ */
+const LlmMusicSchema = z
+  .object({
+    genre: z.preprocess((v) => (typeof v === 'string' ? v.toLowerCase().trim() : v), z.enum(MUSIC_GENRES)),
+    search_terms: z.array(z.string().min(2).max(40)).min(1).max(4),
+    note: z.string().max(120).optional().catch(undefined),
+  })
+  .optional()
+  .catch(undefined);
 export const LlmStorySchema = StorySchema.extend({
   beats: z.array(LlmBeatSchema).min(6).max(14),
   overlay_hook: z.string().min(3).max(200).optional(),
   evidence_stamp: z.string().min(4).max(200).optional(),
+  music: LlmMusicSchema,
 });
 export type LlmStory = z.infer<typeof LlmStorySchema>;
 

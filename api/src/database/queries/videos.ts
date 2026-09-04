@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify';
-import type { PipelineStep, Story, StoryFinding, Video, VideoStatus } from '@reel-agent/shared';
+import type { PipelineStep, SourceImage, Story, StoryFinding, Video, VideoStatus } from '@reel-agent/shared';
 
 type VideoRow = Video;
 
 /** All videos, newest first. */
 export async function findAllVideos(app: FastifyInstance): Promise<VideoRow[]> {
   const { rows } = await app.pg.query<VideoRow>(
-    `SELECT id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, error,
+    `SELECT id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, source_images, error,
             total_cost_usd, created_at, updated_at
        FROM videos ORDER BY created_at DESC`,
   );
@@ -19,7 +19,7 @@ export async function findVideoById(
   id: number,
 ): Promise<VideoRow | null> {
   const { rows } = await app.pg.query<VideoRow>(
-    `SELECT id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, error,
+    `SELECT id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, source_images, error,
             total_cost_usd, created_at, updated_at
        FROM videos WHERE id = $1`,
     [id],
@@ -35,7 +35,7 @@ export async function createDraftVideo(
   const { rows } = await app.pg.query<VideoRow>(
     `INSERT INTO videos (topic, status, current_step, topic_embedding, source_url)
      VALUES ($1, 'draft', 'script', $2, $3)
-     RETURNING id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, error,
+     RETURNING id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, source_images, error,
                total_cost_usd, created_at, updated_at`,
     [
       params.topic,
@@ -50,17 +50,24 @@ export async function createDraftVideo(
 export async function updateVideoSource(
   app: FastifyInstance,
   id: number,
-  params: { topic: string; embedding: number[] | null; sourceMaterial: string },
+  params: {
+    topic: string;
+    embedding: number[] | null;
+    sourceMaterial: string;
+    sourceImages?: SourceImage[];
+  },
 ): Promise<void> {
   await app.pg.query(
     `UPDATE videos
-        SET topic = $2, topic_embedding = $3, source_material = $4, updated_at = now()
+        SET topic = $2, topic_embedding = $3, source_material = $4,
+            source_images = $5::jsonb, updated_at = now()
       WHERE id = $1`,
     [
       id,
       params.topic,
       params.embedding ? JSON.stringify(params.embedding) : null,
       params.sourceMaterial,
+      JSON.stringify(params.sourceImages ?? []),
     ],
   );
 }
@@ -73,7 +80,7 @@ export async function createVideo(
   const { rows } = await app.pg.query<VideoRow>(
     `INSERT INTO videos (topic, hook, status, story, story_versions, topic_embedding)
      VALUES ($1, $2, 'story_review', $3, $4, $5)
-     RETURNING id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, error,
+     RETURNING id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, source_images, error,
                total_cost_usd, created_at, updated_at`,
     [
       params.topic,
@@ -108,7 +115,7 @@ export async function updateVideoStory(
             story_versions = story_versions || $4::jsonb,
             updated_at = now()
       WHERE id = $1
-      RETURNING id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, error,
+      RETURNING id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, source_images, error,
                 total_cost_usd, created_at, updated_at`,
     [
       id,
@@ -143,7 +150,7 @@ export async function updateVideoOverlay(
         SET story = story || $2::jsonb,
             updated_at = now()
       WHERE id = $1 AND story IS NOT NULL
-      RETURNING id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, error,
+      RETURNING id, topic, hook, status, current_step, story, story_versions, story_findings, source_url, source_material, source_images, error,
                 total_cost_usd, created_at, updated_at`,
     [id, JSON.stringify(fields)],
   );

@@ -27,6 +27,8 @@ export class CodexProvider implements LlmProvider {
         '--skip-git-repo-check',
         '--sandbox', 'read-only',
         ...(this.model ? ['--model', this.model] : []),
+        // `-i <FILE>` attaches an image to the initial prompt (codex exec --help)
+        ...(opts.images ?? []).flatMap((file) => ['-i', file]),
         prompt,
       ],
       // stdin MUST be closed: codex exec waits for stdin EOF on a piped stdin

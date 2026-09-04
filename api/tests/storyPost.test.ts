@@ -13,6 +13,7 @@ import {
   buildImagePrompt,
   buildMotionPrompt,
   countWords,
+  deriveMusic,
   deriveOverlayHook,
   durationForWords,
   postProcessStory,
@@ -205,5 +206,47 @@ describe('findings alongside the legacy warnings array', () => {
 
   it('never throws, however broken the story is', () => {
     expect(() => postProcessStory(sloppyStoryFixture())).not.toThrow();
+  });
+});
+
+describe('music suggestion', () => {
+  it('keeps the model\'s music and emits no music finding', () => {
+    const { story, findings } = postProcessStory(storyFixture());
+    expect(story.music).toEqual({ genre: 'dark ambient', search_terms: ['dark ambient drone', 'low tension pad'] });
+    expect(findings.find((f) => f.rule === 'music.derived')).toBeUndefined();
+  });
+
+  it('derives a fallback with a music.derived warning when the model omits it', () => {
+    const { music: _omit, ...raw } = storyFixture();
+    const { story, findings } = postProcessStory(raw);
+    expect(story.music?.genre).toBe('dark ambient'); // "killed a valley" → disaster family
+    const finding = findings.find((f) => f.rule === 'music.derived');
+    expect(finding).toMatchObject({ severity: 'warning', field: 'music', beat_index: null, evidence: 'dark ambient' });
+  });
+
+  it('LlmStorySchema collapses a bad genre to undefined instead of failing the story', () => {
+    const parsed = LlmStorySchema.parse({
+      ...storyFixture(),
+      music: { genre: 'Trap Metal', search_terms: ['x'] },
+    });
+    expect(parsed.music).toBeUndefined();
+    // …and lowercases/trims a valid one
+    expect(
+      LlmStorySchema.parse({ ...storyFixture(), music: { genre: '  Horror ', search_terms: ['eerie'] } }).music,
+    ).toEqual({ genre: 'horror', search_terms: ['eerie'] });
+  });
+
+  it('deriveMusic picks by keyword family, defaulting to tension', () => {
+    const beats = [{ narration: 'plain words' }] as never;
+    expect(deriveMusic({ topic: 'The haunted lighthouse keeper', hook: 'x', beats }).genre).toBe('horror');
+    expect(deriveMusic({ topic: 'The great train robbery', hook: 'x', beats }).genre).toBe('suspense thriller');
+    expect(deriveMusic({ topic: 'Miners rescued after 69 days', hook: 'x', beats }).genre).toBe('cinematic orchestral');
+    expect(deriveMusic({ topic: 'A town buried by a lahar', hook: 'x', beats }).genre).toBe('dark ambient');
+    expect(deriveMusic({ topic: 'The island that moved', hook: 'x', beats }).genre).toBe('tension');
+  });
+
+  it('StorySchema accepts a story without music (historical rows)', () => {
+    const { music: _omit, ...raw } = storyFixture();
+    expect(StorySchema.parse(raw).music).toBeUndefined();
   });
 });

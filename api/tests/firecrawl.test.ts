@@ -11,7 +11,8 @@ vi.mock('firecrawl', () => ({
   },
 }));
 
-const { extractLinkedUrls, FirecrawlClient } = await import('../src/clients/firecrawl.js');
+const { extractLinkedUrls, extractSourceImages, FirecrawlClient, MAIN_CONTENT_OPTIONS, upgradeWikimediaThumb } =
+  await import('../src/clients/firecrawl.js');
 
 function testConfig(overrides: Record<string, string> = {}) {
   return loadConfig({
@@ -49,7 +50,20 @@ describe('FirecrawlClient', () => {
     expect(scrape).toHaveBeenCalledWith('https://example.com/nyos', {
       formats: ['markdown', 'links'],
       onlyMainContent: true,
+      blockAds: true,
+      removeBase64Images: true,
+      excludeTags: ['nav', 'header', 'footer', 'aside', 'form', 'iframe', 'script', 'style'],
       timeout: 60_000,
+    });
+  });
+
+  it('scrapeMany applies the same main-content filter as scrape', async () => {
+    batchScrape.mockResolvedValue({ data: [] });
+    await new FirecrawlClient(testConfig()).scrapeMany(['https://a.com']);
+    expect(batchScrape).toHaveBeenCalledWith(['https://a.com'], {
+      options: { formats: ['markdown'], ...MAIN_CONTENT_OPTIONS },
+      ignoreInvalidURLs: true,
+      timeout: 180,
     });
   });
 
@@ -102,5 +116,75 @@ describe('extractLinkedUrls', () => {
 
   it('returns empty for markdown without links', () => {
     expect(extractLinkedUrls('plain text only', source, 5)).toEqual([]);
+  });
+});
+
+describe('upgradeWikimediaThumb', () => {
+  it('rewrites a thumb URL to the full-size original', () => {
+    expect(
+      upgradeWikimediaThumb(
+        'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Lake_Nyos.jpg/220px-Lake_Nyos.jpg',
+      ),
+    ).toBe('https://upload.wikimedia.org/wikipedia/commons/a/ab/Lake_Nyos.jpg');
+  });
+
+  it('leaves non-thumb and non-wikimedia URLs alone', () => {
+    expect(upgradeWikimediaThumb('https://upload.wikimedia.org/wikipedia/commons/a/ab/Lake_Nyos.jpg')).toBe(
+      'https://upload.wikimedia.org/wikipedia/commons/a/ab/Lake_Nyos.jpg',
+    );
+    expect(upgradeWikimediaThumb('https://example.com/thumb/x/220px-y.jpg')).toBe(
+      'https://example.com/thumb/x/220px-y.jpg',
+    );
+  });
+});
+
+describe('extractSourceImages', () => {
+  const page = 'https://en.wikipedia.org/wiki/Lake_Nyos_disaster';
+
+  it('keeps editorial photos in order, upgrades wikimedia thumbs, carries alt and caption', () => {
+    const md = [
+      '# Lake Nyos disaster',
+      '![Lake Nyos after the eruption](https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Nyos.jpg/300px-Nyos.jpg)',
+      'The lake as it appeared on 29 August 1986.',
+      '',
+      'Some paragraph text.',
+      '![](/media/cattle.png) Dead cattle in the Nyos valley',
+    ].join('\n');
+    expect(extractSourceImages(md, page, 4)).toEqual([
+      {
+        url: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Nyos.jpg',
+        alt: 'Lake Nyos after the eruption',
+        context: 'The lake as it appeared on 29 August 1986.',
+      },
+      {
+        url: 'https://en.wikipedia.org/media/cattle.png',
+        alt: null,
+        context: 'Dead cattle in the Nyos valley',
+      },
+    ]);
+  });
+
+  it('drops icons, flags, svg/gif, duplicates and non-http, and honours the cap', () => {
+    const md = [
+      '![](https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Commons-logo.svg/30px-Commons-logo.svg.png)',
+      '![Flag](https://upload.wikimedia.org/wikipedia/commons/thumb/1/1c/Flag_of_Cameroon.svg/23px-Flag_of_Cameroon.svg.png)',
+      '![edit](https://en.wikipedia.org/static/images/edit-icon.png)',
+      '![anim](https://a.com/anim.gif)',
+      '![vector](https://a.com/map.svg)',
+      '![one](https://a.com/one.jpg)',
+      '![one again](https://a.com/one.jpg?w=800)',
+      '![data](data:image/png;base64,AAAA)',
+      '![two](https://a.com/two.jpg)',
+      '![three](https://a.com/three.jpg)',
+    ].join('\n');
+    expect(extractSourceImages(md, page, 2).map((i) => i.url)).toEqual([
+      'https://a.com/one.jpg',
+      'https://a.com/two.jpg',
+    ]);
+  });
+
+  it('returns nothing for a zero cap or markdown without images', () => {
+    expect(extractSourceImages('![x](https://a.com/x.jpg)', page, 0)).toEqual([]);
+    expect(extractSourceImages('no images here', page, 4)).toEqual([]);
   });
 });
