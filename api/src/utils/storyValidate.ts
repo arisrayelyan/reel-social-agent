@@ -2,11 +2,11 @@ import {
   ATMOSPHERE_CUES,
   BEAT_GAP_SECONDS,
   BEAT_ROLE_ORDER,
-  CAMERA_BEHAVIOR_TERMS,
   CAMERA_VERBS,
   CAPTURE_MEDIA,
   DOCUMENT_SUBJECT_TERMS,
   GENERIC_MOTION_VERBS,
+  GRAPHIC_CONTENT_EXCLUSIONS,
   GRAPHIC_CONTENT_TERMS,
   IMPERFECTION_CUES,
   IMPLAUSIBLE_MOTION,
@@ -14,6 +14,7 @@ import {
   LIGHT_DIRECTIONS,
   MAX_BEAT_WORDS,
   MAX_HOOK_BEAT_WORDS,
+  MAX_HOOK_IMAGE_PROMPT_WORDS,
   MAX_SENTENCE_WORDS,
   MIN_SENTENCE_STDEV,
   PERSON_TERMS,
@@ -30,6 +31,7 @@ import {
   TARGET_WORD_COUNT,
   captureMediaIn,
   matchPhrases,
+  stripPhrases,
   matchVerbKeys,
   shotTypeOf,
   type FindingField,
@@ -162,6 +164,52 @@ function hasSubjectMotion(motionPrompt: string): boolean {
   );
 }
 
+/**
+ * Anything that reads as the camera rather than the scene.
+ *
+ * `frame` only in its camera senses: "grips the frame" is a car's frame, and
+ * treating the bare word as a camera cue dropped a whole clause of real action.
+ */
+const CAMERA_CLAUSE =
+  /\b(camera|lens|macro glide|rack focus|frame (?:stays|holds|remains)|fixed frame|pans?|tilts?|orbits?|dollys?|cranes?|zooms?|tracking|handheld)\b/i;
+
+/**
+ * Clause boundaries. Splitting on punctuation alone is not enough: these
+ * prompts routinely join the action to the camera with "while" or "as"
+ * ("Both men feed sticks into the fire as the camera tilts up"), so the camera
+ * word poisoned the action clause and the beat looked camera-only.
+ */
+const CLAUSE_SPLIT = /[;,.]|\swhile\s|\sas\s/i;
+
+/**
+ * Words left once every camera clause is removed.
+ *
+ * This replaced a lexicon check, and the reason is worth keeping: gating a
+ * mandatory-action rule on SUBJECT_MOTION_VERBS errored 4-7 beats of EVERY
+ * story in the Opus 5 corpus, on prompts that plainly described action —
+ * "the two men haul him forward" (the alias was `hauls`, not bare `haul`),
+ * "the dust wall rolls back over the road" (aliases had `rolls over`, not
+ * `rolls back`), "steam creeps out of the crack and spreads over the
+ * concrete". CLAUDE.md already recorded this trap once; no alias list covers
+ * English motion, and every miss buys a paid retry.
+ *
+ * So the rule tests the thing it actually cares about: is the camera the ONLY
+ * thing moving? A camera-only prompt leaves nothing behind (measured: 0 words),
+ * while a real one leaves 6-15.
+ */
+function nonCameraWordCount(motionPrompt: string): number {
+  return motionPrompt
+    .split(CLAUSE_SPLIT)
+    .filter((clause) => clause.trim().length > 0 && !CAMERA_CLAUSE.test(clause))
+    .join(' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+/** Below this, whatever is left beside the camera cannot be an event. */
+const MIN_NON_CAMERA_WORDS = 4;
+
 /** Beats licensed to name a capture medium in their own image_prompt. */
 function isInstitutionalCamBeat(imagePrompt: string): boolean {
   const medium = CAPTURE_MEDIA.find((m) => m.id === INSTITUTIONAL_CAM_ID)!;
@@ -193,11 +241,17 @@ export const STORY_RULES: readonly StoryRule[] = [
   {
     id: 'story.camera_locked_excess',
     severity: 'warning', field: 'story', scope: 'story', tier: 1,
-    source: `${PROMPT} MOTION (exactly 2 locked beats)`,
+    source: `${PROMPT} MOTION (do not ask for a static frame)`,
     check: (ctx, emit) => {
-      const locked = ctx.story.beats.filter((b) => b.camera_locked).length;
-      if (locked > 2) {
-        emit(null, `${locked} locked-camera beats — the grammar calls for exactly 2; more reads as a slideshow of stills`);
+      // the old threshold was "more than 2", which the model read as a quota
+      // to fill — and postProcessStory used to force two beats locked when it
+      // did not. Stillness is now only right when it IS the evidence.
+      const locked = ctx.story.beats.filter((b) => b.camera_locked);
+      if (locked.length > 0) {
+        emit(
+          null,
+          `${locked.length} locked-camera beat(s) (${locked.map((b) => b.index).join(', ')}) — a tripod-locked frame is a photograph unless the stillness itself is the documented evidence`,
+        );
       }
     },
   },
@@ -310,13 +364,19 @@ export const STORY_RULES: readonly StoryRule[] = [
         }
       }
       for (const [key, beats] of seen) {
-        if (beats.length > 1) {
-          emit(
-            null,
-            `Motion verb "${key}" is used in beats ${beats.join(', ')} — each verb may appear once per video`,
-            key,
-            cameraKeys.has(key) ? 'error' : 'warning',
-          );
+        if (beats.length <= 1) continue;
+        // A repeated CAMERA move is the drifting-slideshow tell: still an
+        // error. A repeated SUBJECT verb only reads as repetition when the
+        // beats are next to each other — with action now mandatory on every
+        // beat, once-per-video across the whole reel forced the exotic
+        // synonyms the prompt itself warns against.
+        if (cameraKeys.has(key)) {
+          emit(null, `Camera move "${key}" is used in beats ${beats.join(', ')} — each camera cue may appear once per video`, key, 'error');
+          continue;
+        }
+        const adjacent = beats.some((b, i) => i > 0 && b - beats[i - 1]! === 1);
+        if (adjacent) {
+          emit(null, `Motion verb "${key}" repeats in neighbouring beats ${beats.join(', ')} — vary it between consecutive shots`, key, 'warning');
         }
       }
     },
@@ -350,16 +410,39 @@ export const STORY_RULES: readonly StoryRule[] = [
     },
   },
   {
-    // Was a tier-2 warning at 4. Both reels published on 2 Sep 2026 shipped
-    // with 2–3 moving beats and read as slideshows; an error buys the rewrite
-    // retry inside the existing 2-call budget.
-    id: 'story.subject_motion_count',
-    severity: 'error', field: 'motion_prompt', scope: 'story', tier: 1,
-    source: `${PROMPT} MOTION (at least 5 beats with subject motion)`,
+    /**
+     * Every beat has to move something in the frame. Was a story-level count
+     * (">= 5 of 9 beats"), which let a third of the reel be a photograph with
+     * a pan over it — and the camera clause was mandatory on all of them, so
+     * the grammar produced exactly the montage it was meant to prevent.
+     *
+     * An error on purpose: errors are fed back verbatim on the single paid
+     * retry, so severity is the emphasis dial the model actually reads.
+     */
+    id: 'motion.no_subject_motion',
+    severity: 'error', field: 'motion_prompt', scope: 'beat', tier: 1,
+    source: `${PROMPT} MOTION (every beat moves something in the frame)`,
     check: (ctx, emit) => {
-      const moving = ctx.story.beats.filter((b) => hasSubjectMotion(b.motion_prompt)).length;
-      if (moving < 5) {
-        emit(null, `Only ${moving} beat${moving === 1 ? '' : 's'} move the scene rather than just the camera — at least 5 are required, or it reads as a drifting slideshow`);
+      for (const beat of ctx.story.beats) {
+        const left = nonCameraWordCount(beat.motion_prompt);
+        if (left < MIN_NON_CAMERA_WORDS) {
+          emit(
+            beat.index,
+            'motion_prompt moves nothing but the camera — name a physical event in the frame. A person hauling, bracing or shielding counts; a camera move does not',
+            beat.motion_prompt.slice(0, 60),
+          );
+          continue;
+        }
+        // something is described, but nothing recognisable as motion. A hint
+        // rather than a retry: the lexicons under-count real English.
+        if (!hasSubjectMotion(beat.motion_prompt)) {
+          emit(
+            beat.index,
+            'motion_prompt describes the frame but no recognisable movement — check that something actually happens in it',
+            beat.motion_prompt.slice(0, 60),
+            'warning',
+          );
+        }
       }
     },
   },
@@ -652,7 +735,11 @@ export const STORY_RULES: readonly StoryRule[] = [
     source: `${STYLE_DOC} §7 (people yes, corpses/injury never)`,
     check: (ctx, emit) => {
       for (const beat of ctx.story.beats) {
-        const hits = matchPhrases(beat.image_prompt, GRAPHIC_CONTENT_TERMS);
+        // material senses out first: "rust bleeding" is wear, not injury
+        const hits = matchPhrases(
+          stripPhrases(beat.image_prompt, GRAPHIC_CONTENT_EXCLUSIONS),
+          GRAPHIC_CONTENT_TERMS,
+        );
         if (hits.length > 0) {
           emit(beat.index, `image_prompt names "${hits[0]}" — shoot the absence for death beats: the empty doorway, the cold fire pit, the boots by the bed`, hits[0]!);
         }
@@ -663,13 +750,47 @@ export const STORY_RULES: readonly StoryRule[] = [
     // The inverse of the rule it replaced: a reel with no human in any frame
     // is a still-life catalogue, and the research report's storyboard asks
     // for a person beat and a human/result image.
+    /**
+     * Was "warn when ZERO beats have a person", which a reel satisfied with
+     * one figure in nine beats. People are the most legible thing a frame can
+     * hold, so the bar is most beats.
+     */
     id: 'image.human_presence',
     severity: 'warning', field: 'image_prompt', scope: 'story', tier: 2,
-    source: `${STYLE_DOC} §7 (at least one beat carries a human figure)`,
+    source: `${STYLE_DOC} §7 (a person in almost every beat)`,
     check: (ctx, emit) => {
-      const withPeople = ctx.story.beats.filter((b) => matchPhrases(b.image_prompt, PERSON_TERMS).length > 0);
-      if (withPeople.length === 0) {
-        emit(null, 'No beat puts a human figure in frame — one beat with a person for scale or reaction is what separates a record of an event from a catalogue of objects');
+      const withPeople = ctx.story.beats.filter(
+        (b) => matchPhrases(b.image_prompt, PERSON_TERMS).length > 0,
+      );
+      const wanted = Math.ceil(ctx.story.beats.length / 2);
+      if (withPeople.length < wanted) {
+        emit(
+          null,
+          `Only ${withPeople.length} of ${ctx.story.beats.length} beats put a person in frame — a reel of empty places is a catalogue of objects, and people are the most legible thing a frame can hold`,
+        );
+      }
+    },
+  },
+  {
+    /**
+     * Faces, specifically. The prompt used to allow people and then give three
+     * averted examples ("a back turned to the event", "hands on a rail"), and
+     * the model generalised the ban on ADDRESSING the lens into no faces at
+     * all. A lit face in profile is not a face turning to camera.
+     */
+    id: 'image.face_visible',
+    severity: 'warning', field: 'image_prompt', scope: 'story', tier: 2,
+    source: `${STYLE_DOC} §7 (faces are wanted, lit and visible)`,
+    check: (ctx, emit) => {
+      const faceTerms = ['face', 'faces', 'cheek', 'profile', 'expression', 'eyes', 'jaw', 'brow'];
+      const withFaces = ctx.story.beats.filter(
+        (b) => matchPhrases(b.image_prompt, faceTerms).length > 0,
+      );
+      if (withFaces.length === 0) {
+        emit(
+          null,
+          'No beat puts a lit face in frame — faces in profile or three-quarter, absorbed in the work, are wanted. Only ADDRESSING the lens is banned',
+        );
       }
     },
   },
@@ -705,6 +826,23 @@ export const STORY_RULES: readonly StoryRule[] = [
       const hits = matchPhrases(hook.image_prompt, DOCUMENT_SUBJECT_TERMS);
       if (hits.length > 0) {
         emit(hook.index, `The hook image is paperwork ("${hits[0]}") — the first frame is the cover and the swipe decision; it has to show the event itself at its most extreme moment`, hits[0]!);
+      }
+    },
+  },
+  {
+    id: 'image.hook_legibility',
+    severity: 'warning', field: 'image_prompt', scope: 'beat', tier: 2,
+    source: `${STYLE_DOC} §7 + retention postmortem §10.2 (a LEGIBLE anomaly)`,
+    check: (ctx, emit) => {
+      const hook = ctx.story.beats.find((beat) => beat.role === 'hook');
+      if (!hook) return;
+      const words = wordsOf(hook.image_prompt).length;
+      if (words > MAX_HOOK_IMAGE_PROMPT_WORDS) {
+        emit(
+          hook.index,
+          `Hook image prompt is ${words} words against a ${MAX_HOOK_IMAGE_PROMPT_WORDS}-word cap — a compliant hook needs about 38, so the extra length is extra SUBJECTS. The first frame has a third of a second to be read: one subject, one thing wrong with it`,
+          hook.image_prompt.slice(0, 120),
+        );
       }
     },
   },
@@ -814,22 +952,6 @@ export const STORY_RULES: readonly StoryRule[] = [
     },
   },
   {
-    id: 'motion.no_camera_behavior',
-    severity: 'error', field: 'motion_prompt', scope: 'beat', tier: 1,
-    source: `${FAL_DOC} §3 (an unspecified camera defaults to a flat slow zoom)`,
-    check: (ctx, emit) => {
-      for (const beat of ctx.story.beats) {
-        if (beat.camera_locked) continue;
-        const named =
-          matchVerbKeys(beat.motion_prompt, CAMERA_VERBS).length > 0 ||
-          matchPhrases(beat.motion_prompt, CAMERA_BEHAVIOR_TERMS).length > 0;
-        if (!named) {
-          emit(beat.index, 'Non-locked beat names no camera behaviour — an unspecified camera defaults to a flat slow zoom, which is the AI-slideshow look');
-        }
-      }
-    },
-  },
-  {
     id: 'motion.locked_has_camera_move',
     severity: 'error', field: 'motion_prompt', scope: 'beat', tier: 1,
     source: 'shared/src/constants.ts MOTION_LOCKED_CAMERA',
@@ -853,11 +975,9 @@ export const STORY_RULES: readonly StoryRule[] = [
     check: (ctx, emit) => {
       const hook = ctx.story.beats.find((b) => b.role === 'hook');
       if (!hook) return;
+      // the action requirement is now motion.no_subject_motion, on every beat
       if (hook.camera_locked) {
         emit(hook.index, 'The hook beat is camera_locked — the opening two seconds must move', 'camera_locked');
-      }
-      if (!hasSubjectMotion(hook.motion_prompt)) {
-        emit(hook.index, 'The hook motion_prompt names no subject motion — something in the frame has to be happening, not just the camera', hook.motion_prompt.slice(0, 60));
       }
     },
   },

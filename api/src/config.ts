@@ -30,6 +30,8 @@ export interface AppConfig {
   geminiApiKey: string;
   geminiImageModel: string;
   geminiImageCostUsd: number;
+  /** '1K' | '2K' | '4K', or '' to send nothing. Ignored by 2.5-flash-image. */
+  geminiImageSize: string;
   falKey: string;
   falVideoModel: string;
   falVideoResolution: string;
@@ -46,6 +48,9 @@ export interface AppConfig {
    * 'balanced' keeps today's behaviour, now explicit and switchable.
    */
   falPromptExpansionMode: string;
+  /** Beats that may get a generated video clip; the rest cut from stills.
+   *  Infinity (env unset) = every beat, so the reel stays generated video. */
+  falMaxClipsPerVideo: number;
   /**
    * Generate a deterministic end frame for the kicker (one extra Gemini edit)
    * and drive the kicker clip with first+last frame, so the reel's final frame
@@ -117,14 +122,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     geminiApiKey: env.GEMINI_API_KEY ?? '',
     geminiImageModel: env.GEMINI_IMAGE_MODEL ?? 'gemini-2.5-flash-image',
     geminiImageCostUsd: Number(env.GEMINI_IMAGE_COST_USD ?? 0.039),
+    geminiImageSize: env.GEMINI_IMAGE_SIZE ?? '',
     falKey: env.FAL_KEY ?? '',
     falVideoModel: env.FAL_VIDEO_MODEL ?? 'minimax/h3-max/image-to-video',
     falVideoResolution: env.FAL_VIDEO_RESOLUTION ?? '768P',
     falVideoModelDraft: env.FAL_VIDEO_MODEL_DRAFT ?? '',
     falVideoResolutionDraft: env.FAL_VIDEO_RESOLUTION_DRAFT ?? '480P',
     falPromptExpansionMode: env.FAL_PROMPT_EXPANSION_MODE ?? 'quality',
+    // unset = no cap: every beat gets a clip and the reel stays generated
+    // video throughout. A number caps it, and the uncapped beats cut from
+    // stills instead — 0 means stills only.
+    falMaxClipsPerVideo:
+      env.FAL_MAX_CLIPS_PER_VIDEO === undefined || env.FAL_MAX_CLIPS_PER_VIDEO === ''
+        ? Number.POSITIVE_INFINITY
+        : Number(env.FAL_MAX_CLIPS_PER_VIDEO),
     loopableKicker: (env.LOOPABLE_KICKER ?? 'true') !== 'false',
-    falCostPerSecondUsd: Number(env.FAL_COST_PER_SECOND_USD ?? 0.04),
+    falCostPerSecondUsd: Number(env.FAL_COST_PER_SECOND_USD ?? 0.08),
     falCostPerSecondUsdMap: parseCostMap(env.FAL_COST_PER_SECOND_USD_MAP),
     firecrawlApiKey: env.FIRECRAWL_API_KEY ?? '',
     firecrawlMaxLinkedPages: Number(env.FIRECRAWL_MAX_LINKED_PAGES ?? 4),

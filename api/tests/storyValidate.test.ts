@@ -31,7 +31,7 @@ const CASES: RuleCase[] = [
   // ── envelope ──
   { rule: 'story.word_count_envelope', mutate: (s) => eachBeat(s, (b) => { b.narration = 'Short beat here.'; b.word_count = 3; }) },
   { rule: 'story.duration_envelope', mutate: (s) => eachBeat(s, (b) => { b.duration_seconds = 0.5; }) },
-  { rule: 'story.camera_locked_excess', mutate: (s) => eachBeat(s, (b) => { b.camera_locked = true; }) },
+  { rule: 'story.camera_locked_excess', mutate: (s) => { s.beats[2]!.camera_locked = true; } },
   { rule: 'story.beat_count', mutate: (s) => { s.beats = s.beats.slice(0, 6); } },
 
   // ── structure ──
@@ -42,7 +42,7 @@ const CASES: RuleCase[] = [
     rule: 'story.example_leakage',
     mutate: (s) => { s.beats[1]!.narration = `${examples()[0]} Nothing else changed here.`; },
   },
-  { rule: 'story.motion_verb_reuse', mutate: (s) => { s.beats[3]!.motion_prompt = 'the camera pushes in on the wet paint'; } },
+  { rule: 'story.motion_verb_reuse', mutate: (s) => { s.beats[3]!.motion_prompt = 'the painter reaches up as the camera pushes in'; s.beats[6]!.motion_prompt = 'the woman kneels as the camera pushes in on the stove'; } },
   {
     rule: 'story.shot_type_diversity',
     mutate: (s) => eachBeat(s, (b, i) => { b.image_prompt = `wide shot of subject number ${i} with rusted plating, light from the left`; }),
@@ -51,7 +51,7 @@ const CASES: RuleCase[] = [
     rule: 'story.shot_type_adjacent',
     mutate: (s) => { s.beats[1]!.image_prompt = s.beats[0]!.image_prompt.replace(/^extreme close-up of/, 'extreme close-up of'); },
   },
-  { rule: 'story.subject_motion_count', mutate: (s) => eachBeat(s, (b) => { b.motion_prompt = 'the camera holds steady on the frame'; }) },
+  { rule: 'motion.no_subject_motion', mutate: (s) => { s.beats[3]!.motion_prompt = 'the camera pans slowly across the plate'; } },
   { rule: 'story.repeated_openers', mutate: (s) => { s.beats[2]!.narration = `Molasses killed the street that morning.`; } },
   {
     rule: 'story.sentence_variance',
@@ -107,6 +107,20 @@ const CASES: RuleCase[] = [
     },
   },
   { rule: 'image.hook_is_document', mutate: (s) => { s.beats[0]!.image_prompt = 'overhead view of a printed map on a scratched desk, lamp light from above'; } },
+  { rule: 'image.face_visible', mutate: (s) => eachBeat(s, (b, i) => {
+    // people still in frame, but every face turned away — the exact shape the
+    // prompt used to teach with "a back turned to the event"
+    b.image_prompt = `medium shot of a labourer in canvas overalls with his back turned at the rail number ${i}, low sun from the west, salt crust in the joints`;
+  }) },
+  { rule: 'image.hook_legibility', mutate: (s) => {
+    // the Opus 5 eval's longest hook: nine distinct objects in one frame
+    s.beats[0]!.image_prompt =
+      'low angle of a telegraph pole and its crossarm wires against a sky filled with red and ' +
+      'green auroral curtains over a Boston street, sparks at a cracked glass insulator, a man ' +
+      'in a frock coat and stovepipe hat on the plank sidewalk with his back turned, lit by the ' +
+      'auroral glow above and to the north, wet cobbles and a bent iron gutter, pole set ' +
+      'off-centre with brick storefronts along the right edge';
+  } },
   { rule: 'image.document_beats', mutate: (s) => { s.beats[2]!.image_prompt = 'detail shot of a folded and creased map, light from above'; } },
   { rule: 'image.booru_syntax', mutate: (s) => { s.beats[2]!.image_prompt = 'detail shot of a rusted seam (quality:1.4), light from above'; } },
   { rule: 'image.imperfection', mutate: (s) => { s.beats[2]!.image_prompt = 'detail shot of a clean steel seam, light from above'; } },
@@ -119,8 +133,7 @@ const CASES: RuleCase[] = [
     mutate: (s) => { s.beats[2]!.motion_prompt = 'a single bead swells at the seam and falls and swells again and falls again and swells once more and falls once more and keeps on going like that for the whole shot without stopping'; },
   },
   { rule: 'motion.frame_redescription', mutate: (s) => { s.beats[2]!.motion_prompt = 'a bead swells at the seam under muted 35mm film stock'; } },
-  { rule: 'motion.no_camera_behavior', mutate: (s) => { s.beats[3]!.motion_prompt = 'the wet paint darkens at the split'; } },
-  { rule: 'motion.locked_has_camera_move', mutate: (s) => { s.beats[2]!.motion_prompt = 'the camera orbits the weeping seam as a bead falls'; } },
+  { rule: 'motion.locked_has_camera_move', mutate: (s) => { s.beats[2]!.camera_locked = true; s.beats[2]!.motion_prompt = 'the camera orbits the weeping seam as a bead falls'; } },
   { rule: 'motion.multiple_camera_cues', mutate: (s) => { s.beats[3]!.motion_prompt = 'the camera pans left and then cranes up over the painted plate'; } },
   { rule: 'motion.hook_locked', mutate: (s) => { s.beats[0]!.camera_locked = true; } },
   { rule: 'motion.implausible', mutate: (s) => { s.beats[2]!.motion_prompt = 'a bead falls from the seam in extreme slow motion'; } },
@@ -172,6 +185,103 @@ describe('every rule fires when its rule is broken', () => {
     mutate(story);
     const findings = validateStory(story, { promptExamples: examples() });
     expect(findings.map((f) => f.rule)).toContain(rule);
+  });
+});
+
+describe('eval regressions (Opus 5 high via cursor-agent, 3 Sep 2026)', () => {
+  it('does not error on rust bleeding — that is wear, not injury', () => {
+    // hit 3 of 5 Opus 5 stories at ERROR severity, so each one bought a
+    // second paid provider call for exactly the concrete wear detail that
+    // image.imperfection asks for
+    const story = goodStoryFixture();
+    story.beats[2]!.image_prompt =
+      'close-up of a mooring line and anchor chain against a scarred wooden bow rail, ' +
+      'rust bleeding from the chain links, sidelight from the low western sun';
+    const graphic = validateStory(story, { promptExamples: examples() }).filter(
+      (f) => f.rule === 'image.graphic_content',
+    );
+    expect(graphic).toEqual([]);
+  });
+
+  it('still errors on the bodily sense the rule exists for', () => {
+    const story = goodStoryFixture();
+    story.beats[2]!.image_prompt = 'close-up of a bleeding man on the cinder track';
+    expect(
+      validateStory(story, { promptExamples: examples() }).some(
+        (f) => f.rule === 'image.graphic_content' && f.severity === 'error',
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('image.hook_legibility calibration', () => {
+  const hookWords = (story: Story) =>
+    validateStory(story, { promptExamples: examples() }).filter(
+      (f) => f.rule === 'image.hook_legibility',
+    );
+
+  it('passes a fully compliant hook — every mandated clause present', () => {
+    // the good fixture's hook is 38 words and all of it is required by
+    // prompts/story.user.md: shot type, subject, a human, light + direction,
+    // atmosphere, imperfection
+    expect(hookWords(goodStoryFixture())).toEqual([]);
+  });
+
+  it('flags a hook carrying extra subjects, not extra compliance', () => {
+    const story = goodStoryFixture();
+    story.beats[0]!.image_prompt = `${story.beats[0]!.image_prompt}, a bent warning sign at frame left, a bicycle on its side, two gulls on the parapet, a cracked drain cover in the foreground`;
+    expect(hookWords(story)).toHaveLength(1);
+  });
+
+  it('says nothing about the later beats — only the hook has 0.3s to be read', () => {
+    const story = goodStoryFixture();
+    story.beats[3]!.image_prompt = `${story.beats[3]!.image_prompt}, and a great many more things besides, piled up in the frame until nothing at all can be read from it quickly`;
+    expect(hookWords(story)).toEqual([]);
+  });
+});
+
+describe('motion.no_subject_motion calibration (Opus 5 corpus, 4 Sep 2026)', () => {
+  const errorsFor = (motion: string) => {
+    const story = goodStoryFixture();
+    story.beats[3]!.motion_prompt = motion;
+    return validateStory(story, { promptExamples: examples() }).filter(
+      (f) => f.rule === 'motion.no_subject_motion' && f.severity === 'error',
+    );
+  };
+
+  it('errors when the camera is the only thing moving', () => {
+    for (const motion of [
+      'the camera drifts slowly right across the street',
+      'the camera holds steady on the frame',
+      'the lens racks focus from the wet paint to the split beneath it',
+      // verbatim from the corpus, the one true positive in seven stories
+      'Camera tilts down from bare branches to buckled asphalt in foreground, revealing destruction.',
+    ]) {
+      expect(errorsFor(motion), motion).toHaveLength(1);
+    }
+  });
+
+  it('does NOT error when action and camera share a clause', () => {
+    // every one of these is verbatim from the corpus and every one was a false
+    // positive until the clause splitter learned "while" and "as". A lexicon
+    // gate failed them too: `haul` was not an alias of `hauling`, and
+    // `rolls back` was not an alias of `rolling`.
+    for (const motion of [
+      'Frame stays fixed while the brass counterweight swings slowly to a stop.',
+      'The auroral arc ripples southward across the sky while the camera pulls back along the wire.',
+      'Both men feed sticks into the fire as the camera tilts up toward the sky.',
+      'Camera pushes in while the two men haul him forward, his shoe tips scraping the track.',
+      'The dust wall rolls back over the road and buries the runners behind it, camera tilting down with the cloud.',
+      'Steam creeps out of the floor crack and spreads over the concrete; camera racks focus from the furnace door to the crack.',
+    ]) {
+      expect(errorsFor(motion), motion).toEqual([]);
+    }
+  });
+
+  it('reads a car frame as a car frame, not a camera cue', () => {
+    expect(
+      errorsFor('The car bounces through a rut and the man on the running board grips the frame, camera tracking alongside.'),
+    ).toEqual([]);
   });
 });
 
@@ -270,10 +380,20 @@ describe('people are allowed, the dead are not (2 Sep 2026)', () => {
     expect(rules).not.toContain('image.people');
   });
 
-  it('the hook must move: a locked hook and a camera-only hook both fail', () => {
+  it('a locked hook fails — the opening two seconds must move', () => {
+    const locked = goodStoryFixture();
+    locked.beats[0]!.camera_locked = true;
+    expect(validateStory(locked, { promptExamples: examples() }).map((f) => f.rule)).toContain('motion.hook_locked');
+  });
+
+  it('a camera-only hook fails as a missing physical event, on any beat', () => {
     const cameraOnly = goodStoryFixture();
     cameraOnly.beats[0]!.motion_prompt = 'the camera drifts slowly right across the street';
-    expect(validateStory(cameraOnly, { promptExamples: examples() }).map((f) => f.rule)).toContain('motion.hook_locked');
+    expect(
+      validateStory(cameraOnly, { promptExamples: examples() }).some(
+        (f) => f.rule === 'motion.no_subject_motion' && f.severity === 'error' && f.beat_index === 0,
+      ),
+    ).toBe(true);
   });
 
   it('accepts an atmosphere fact in place of a wear detail', () => {
@@ -312,14 +432,18 @@ describe('eval regressions (Haiku, 2 Sep 2026)', () => {
     expect(validateStory(story, { promptExamples: examples() }).filter((f) => f.rule === 'motion.no_camera_behavior')).toEqual([]);
   });
 
-  it('a repeated subject verb warns, a repeated camera move errors', () => {
+  it('a subject verb repeated in NEIGHBOURING beats warns, a repeated camera move errors', () => {
     const subject = goodStoryFixture();
-    subject.beats[3]!.motion_prompt = 'the lens racks focus as steam lifts off the wet paint';
+    // beat 2 already uses `falling`; repeat it in beat 3, right next to it
+    subject.beats[3]!.motion_prompt = 'the painter reaches up and the loaded brush falls from his hand';
+    subject.beats[2]!.motion_prompt = 'a bead swells at the seam and falls onto the waiting rag';
     const s = validateStory(subject, { promptExamples: examples() }).filter((f) => f.rule === 'story.motion_verb_reuse');
     expect(s.map((f) => f.severity)).toEqual(['warning']);
 
+    // the fixture names no camera moves at all now, so plant the same one twice
     const camera = goodStoryFixture();
-    camera.beats[3]!.motion_prompt = 'the camera pushes in on the wet paint';
+    camera.beats[3]!.motion_prompt = 'the painter reaches up as the camera pushes in';
+    camera.beats[6]!.motion_prompt = 'the woman kneels as the camera pushes in on the stove';
     const c = validateStory(camera, { promptExamples: examples() }).filter((f) => f.rule === 'story.motion_verb_reuse');
     expect(c.map((f) => f.severity)).toEqual(['error']);
   });

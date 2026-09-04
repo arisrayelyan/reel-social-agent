@@ -28,9 +28,11 @@ export const FINDING_FIELDS = [
 export type FindingField = (typeof FINDING_FIELDS)[number];
 
 /**
- * Emitted by postProcessStory, not by the rule registry: only the normalizer
- * knows the pre-forcing camera_locked count, because the validator sees the
- * story after the fix-up has already run.
+ * RETIRED 4 Sep 2026 — nothing emits this any more. postProcessStory used to
+ * force two beats camera_locked when the model wrote fewer; that appended
+ * MOTION_LOCKED_CAMERA, which on a prompt-expanding endpoint dominated the
+ * rewrite and returned a static clip. Kept exported because historical
+ * `videos.story_findings` rows carry the string and `rule` is z.string().
  */
 export const RULE_CAMERA_LOCKED_FORCED = 'story.camera_locked_forced';
 

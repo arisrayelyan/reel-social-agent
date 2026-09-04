@@ -29,8 +29,93 @@ export const BEAT_GAP_SECONDS = 0.6;
  */
 export const END_TAIL_SECONDS = 1.2;
 
+/**
+ * Hook image prompt word cap, as a proxy for how many separate things are in
+ * the first frame. The hook has about a third of a second to be read, and an
+ * unreadable frame fails the same way a static one does.
+ *
+ * Re-derived 4 Sep 2026, when the prompt began mandating a five-part PERSON
+ * SPEC. A fully compliant hook now runs ~48 words — shot type, the anomaly,
+ * the person (age and build, garment, tool, what their hands do, which side of
+ * the face is lit), one light source with a direction, one atmosphere or wear
+ * cue. The acceptance fixture's hook is 47. The previous cap of 45 was
+ * calibrated against a prompt with no person spec and would now fail a
+ * perfectly compliant hook.
+ *
+ * PROVISIONAL: the discriminating power is weaker than it was, because a
+ * person spec legitimately spends the words that used to signal extra
+ * subjects. On the pre-person-spec Opus 5 eval the five hooks ran 54-74 words
+ * and the 74-word one named nine distinct objects, so 60 still catches that
+ * shape. Confirm against a fresh eval before trusting it, and remember it is
+ * a warning: the producer decides.
+ */
+export const MAX_HOOK_IMAGE_PROMPT_WORDS = 60;
+
 /** On-screen hook overlay: max words that fit centre-frame at 88px. */
 export const OVERLAY_HOOK_MAX_WORDS = 8;
+
+/**
+ * Cut rate. A beat is the unit of narration and timing; a SHOT is the unit of
+ * picture, and a beat carries several. The first four published reels put one
+ * shot on each beat, which made every shot as long as its narration — measured
+ * 6.5-15.5s on screen, against the 1-3s a viewer is used to. Video 4's entire
+ * 57 seconds contained seven cuts.
+ *
+ * Subdividing the picture layer is free: the extra shots are stills with a
+ * Remotion-free ffmpeg camera move over them, not fal generations. Audio,
+ * cues and overlays are untouched, so `cues[i]` still means `beats[i]`.
+ */
+export const TARGET_SHOT_SECONDS = 5.0;
+/** Below this the eye cannot parse a new frame before it is replaced. */
+export const MIN_SHOT_SECONDS = 1.6;
+export const MAX_SHOTS_PER_BEAT = 6;
+
+/**
+ * One camera move over a still, as start/end zoom plus start/end window
+ * centre (0.5 = centred, 0 = flush to the low edge).
+ *
+ * Zoom never exceeds MAX_SHOT_ZOOM: Gemini returns 768x1344 at its default
+ * `1K` image size and merge already upscales that to 1080x1920, so every
+ * additional factor compounds on an upscale. GEMINI_IMAGE_SIZE=2K is what
+ * buys the headroom this table assumes.
+ */
+export interface CameraMove {
+  readonly id: string;
+  readonly zoomFrom: number;
+  readonly zoomTo: number;
+  readonly fromX: number;
+  readonly fromY: number;
+  readonly toX: number;
+  readonly toY: number;
+}
+
+export const MAX_SHOT_ZOOM = 1.18;
+
+/**
+ * Named for the house motion grammar in craft.ts CAMERA_VERBS, so a shot's
+ * move reads in the activity log the same way a beat's motion_prompt does.
+ *
+ * Six entries, picked with a stride of 5 (coprime with 6) so consecutive
+ * shots inside a beat never share a move and the pattern does not align with
+ * beat boundaries — a repeating move is the drifting-slideshow tell.
+ */
+export const CAMERA_MOVES: readonly CameraMove[] = [
+  { id: 'push_in',   zoomFrom: 1.0,  zoomTo: 1.18, fromX: 0.5,  fromY: 0.5,  toX: 0.5,  toY: 0.5  },
+  { id: 'pull_back', zoomFrom: 1.18, zoomTo: 1.0,  fromX: 0.5,  fromY: 0.5,  toX: 0.5,  toY: 0.5  },
+  { id: 'pan_right', zoomFrom: 1.14, zoomTo: 1.14, fromX: 0.38, fromY: 0.5,  toX: 0.62, toY: 0.5  },
+  { id: 'tilt_down', zoomFrom: 1.14, zoomTo: 1.14, fromX: 0.5,  fromY: 0.36, toX: 0.5,  toY: 0.64 },
+  { id: 'pan_left',  zoomFrom: 1.14, zoomTo: 1.14, fromX: 0.62, fromY: 0.5,  toX: 0.38, toY: 0.5  },
+  { id: 'crane_up',  zoomFrom: 1.04, zoomTo: 1.16, fromX: 0.5,  fromY: 0.62, toX: 0.5,  toY: 0.4  },
+] as const;
+
+/** Stride is coprime with CAMERA_MOVES.length; see the table's comment. */
+export const CAMERA_MOVE_STRIDE = 5;
+
+export function cameraMoveFor(beatIndex: number, shotIndex: number): CameraMove {
+  const n = CAMERA_MOVES.length;
+  const i = ((beatIndex * CAMERA_MOVE_STRIDE + shotIndex) % n + n) % n;
+  return CAMERA_MOVES[i]!;
+}
 
 /** Render target. */
 export const VIDEO = { width: 1080, height: 1920, fps: 30 } as const;
@@ -76,9 +161,22 @@ export const MOTION_NEGATIVES =
   'No cuts. No one turns to face the camera, no speech, no lip movement. ' +
   'Use only this image, ignore all other references.';
 
-/** Extra line for locked-camera beats (2–3 per video stop the AI-slideshow drift). */
-export const MOTION_LOCKED_CAMERA =
-  'Absolutely no camera movement, tripod locked.';
+/**
+ * The same bans as MOTION_NEGATIVES, in the comma-separated form a real
+ * `negative_prompt` field expects — Kling's own default for that field is
+ * "blur, distort, and low quality", so keyword-ish is the convention there.
+ *
+ * Used ONLY where the endpoint declares the field (see falModels caps). On
+ * h3-max, which has no such field, the prose version stays inside the prompt.
+ * Moving them out matters because the motion prompt has a ~30-word budget
+ * before the family starts dropping instructions, and on an endpoint that
+ * expands the prompt the negatives get amplified while the motion does not.
+ *
+ * UNVERIFIED against a real generation — no endpoint using it is live yet.
+ */
+export const MOTION_NEGATIVES_KEYWORDS =
+  'cuts, scene changes, subject turning to face the camera, speech, lip movement, ' +
+  'on-screen text, watermark, blur, distortion, low quality';
 
 export const VIDEO_STATUSES = [
   'draft',

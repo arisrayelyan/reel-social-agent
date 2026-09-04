@@ -47,6 +47,16 @@ export async function truncateAll(app: FastifyInstance): Promise<void> {
 }
 
 /** Minimal but schema-valid story fixture. */
+/** One curated subject-motion verb each, none repeated in neighbouring beats. */
+const BEAT_ACTIONS = [
+  'brown water surges over the rim',
+  'a farmer hauls the gate chain clear',
+  'ash sifts down across the tin roofs',
+  'the pump housing cracks along its seam',
+  'steam vents hard from the bore pipe',
+  'a lone figure kneels beside the marker',
+] as const;
+
 export function storyFixture(overrides: Partial<Story> = {}): Story {
   const narration = (words: number) => Array.from({ length: words }, (_, i) => `word${i}`).join(' ');
   const roles = ['hook', 'setup', 'escalation', 'turn', 'reveal', 'kicker'] as const;
@@ -57,6 +67,10 @@ export function storyFixture(overrides: Partial<Story> = {}): Story {
     tiktok_caption: 'The lake that killed a valley #history #wtf #truestory',
     style_prefix:
       'nineteen eighties documentary photography, West African highland region, red laterite soil, overcast diffuse morning light, muted 35mm film stock, vertical 9:16 composition, cinematic',
+    // one distinct in-frame action per beat, and nothing camera-locked:
+    // motion.no_subject_motion is an error on any beat whose only movement is
+    // the camera, and an erroring fixture buys a retry in every test that
+    // counts provider calls
     beats: roles.map((role, i) => ({
       index: i,
       role,
@@ -64,8 +78,8 @@ export function storyFixture(overrides: Partial<Story> = {}): Story {
       word_count: 28,
       duration_seconds: 11.59,
       image_prompt: `wide shot of the crater lake at dawn, beat ${i}`,
-      motion_prompt: 'slow push-in over the water',
-      camera_locked: i >= 4,
+      motion_prompt: BEAT_ACTIONS[i]!,
+      camera_locked: false,
     })),
     ...overrides,
   };

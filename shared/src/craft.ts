@@ -155,7 +155,8 @@ export const CAMERA_VERBS: readonly PromptVerb[] = [
 ] as const;
 
 /**
- * In-frame subject motion. >= 5 beats need one; at most two per beat.
+ * In-frame subject motion. EVERY beat needs one (motion.no_subject_motion);
+ * at most two per beat.
  * The second block is the event vocabulary added 2 Sep 2026: the first list
  * was all whisper-scale (a crumb drops, a rope sways), and a WTF channel whose
  * biggest motion is a curling wisp reads as a slideshow.
@@ -189,13 +190,20 @@ export const SUBJECT_MOTION_VERBS: readonly PromptVerb[] = [
   { key: 'running', purpose: 'people reacting', aliases: ['people run', 'runs from', 'run toward', 'run from', 'scramble', 'scrambles', 'flee', 'flees', 'hurry', 'hurries'] },
   { key: 'scattering', purpose: 'crowd or debris dispersing', aliases: ['scatters', 'scattering', 'scatter', 'disperse', 'flung', 'thrown across'] },
   { key: 'rolling', purpose: 'a mass advancing', aliases: ['rolls down', 'rolls across', 'rolls over', 'rolls in', 'tumbles', 'churns'] },
-] as const;
-
-/** Terms that read as "camera" even without a move verb (locked beats say these). */
-export const CAMERA_BEHAVIOR_TERMS: readonly string[] = [
-  'camera', 'static', 'locked', 'tripod', 'fixed frame', 'frame holds', 'camera holds',
-  // bare cinematography nouns — "slow pan across", "orbit around", "lens racks"
-  'lens', 'pan', 'orbit', 'dolly', 'crane', 'tilt', 'zoom', 'tracking',
+  // person-scale action, added 4 Sep 2026. Without these the mandatory
+  // per-beat action rule is unsatisfiable on any beat built around a human:
+  // of the 27 keys above, only `running` and `scattering` covered people, so
+  // "hauling the valve handle over" counted as no motion at all.
+  { key: 'hauling', purpose: 'a person working against weight', aliases: ['hauls', 'hauling', 'drags', 'dragging', 'heaves', 'heaving', 'winches', 'levers'] },
+  { key: 'bracing', purpose: 'a body taking the force', aliases: ['braces', 'bracing', 'leans into', 'plants his', 'plants her', 'digs in', 'holds against'] },
+  { key: 'shielding', purpose: 'reaction to heat, light or debris', aliases: ['shields', 'shielding', 'covers his face', 'covers her face', 'raises an arm', 'turns away from', 'flinches'] },
+  { key: 'reaching', purpose: 'a person trying to act', aliases: ['reaches for', 'reaching for', 'stretches toward', 'grabs at', 'gropes for'] },
+  { key: 'kneeling', purpose: 'inspection at ground level', aliases: ['kneels', 'kneeling', 'crouches down', 'squats beside', 'stoops over'] },
+  { key: 'striking', purpose: 'manual force applied', aliases: ['hammers at', 'strikes', 'striking', 'swings at', 'drives the', 'chisels'] },
+  { key: 'pointing', purpose: 'a person directing attention', aliases: ['points at', 'pointing toward', 'gestures at', 'signals to', 'waves off'] },
+  { key: 'carrying', purpose: 'evacuation, salvage', aliases: ['carries', 'carrying', 'shoulders the', 'lugs', 'bears away'] },
+  { key: 'climbing_person', purpose: 'a person gaining height', aliases: ['climbs the', 'climbing the', 'hauls himself', 'hauls herself', 'scales the'] },
+  { key: 'recoiling', purpose: 'involuntary retreat', aliases: ['recoils', 'recoiling', 'steps back', 'stumbles back', 'jerks back', 'pulls away from'] },
 ] as const;
 
 /**
@@ -291,6 +299,26 @@ export const GRAPHIC_CONTENT_TERMS: readonly string[] = [
   'blood', 'bloody', 'bleeding', 'wound', 'wounds', 'wounded', 'gore', 'gory', 'mutilated',
   'dismembered', 'charred body', 'burned body', 'burning man', 'burning woman', 'drowning',
   'drowned', 'victim', 'victims', 'casualty', 'casualties', 'remains', 'skeleton', 'skull',
+] as const;
+
+/**
+ * Phrases where a GRAPHIC_CONTENT_TERM is material rather than bodily.
+ *
+ * The Opus 5 eval (3 Sep 2026) caught "rust bleeding down the fence post"
+ * erroring on three of five stories. At ERROR severity that bought a second
+ * paid provider call each time — for exactly the concrete wear detail
+ * `image.imperfection` asks for. Same class of bug as bare `grain` in
+ * STYLE_NOUNS below.
+ *
+ * Stripped before matching rather than removed from the term list, because
+ * this rule protects the account from a policy strike: a false negative on
+ * "a bleeding man" costs far more than a false positive on rust.
+ */
+export const GRAPHIC_CONTENT_EXCLUSIONS: readonly string[] = [
+  'rust bleeding', 'dye bleeding', 'colour bleeding', 'color bleeding',
+  'paint bleeding', 'ink bleeding', 'tannin bleeding', 'sap bleeding',
+  'oil bleeding', 'creosote bleeding', 'damp bleeding', 'moisture bleeding',
+  'verdigris bleeding', 'stain bleeding',
 ] as const;
 
 /** Words that mean a human figure is in the frame — image.human_presence wants at least one beat. */
@@ -461,6 +489,18 @@ export function matchPhrases(text: string, phrases: readonly string[]): string[]
 }
 
 /** Distinct verb keys present in `text` (aliases collapse to their key). */
+/**
+ * Removes the given phrases before a lexicon match, so a term used in an
+ * unrelated sense does not trip the rule. See GRAPHIC_CONTENT_EXCLUSIONS.
+ */
+export function stripPhrases(text: string, phrases: readonly string[]): string {
+  let out = text;
+  for (const phrase of phrases) {
+    out = out.replace(new RegExp(`\\b${escapeRegExp(phrase)}\\b`, 'gi'), ' ');
+  }
+  return out;
+}
+
 export function matchVerbKeys(text: string, verbs: readonly PromptVerb[]): string[] {
   const keys: string[] = [];
   for (const verb of verbs) {
