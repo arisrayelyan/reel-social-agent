@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { MUSIC_GENRES } from '@reel-agent/shared';
 import {
   buildChangeRequestPrompt,
+  buildResearchPrompt,
   buildSourceImagesPrompt,
+  researchSystem,
   buildStoryPrompt,
   buildTopicPrompt,
   loadPrompt,
@@ -38,6 +40,8 @@ describe('prompt templates (prompts/ folder)', () => {
       'topics.system.md',
       'topics.user.md',
       'source-images.user.md',
+      'research.system.md',
+      'research.user.md',
     ] as const) {
       expect(loadPrompt(promptsDir, name).length).toBeGreaterThan(20);
     }
@@ -134,5 +138,56 @@ describe('prompt templates (prompts/ folder)', () => {
   it('system prompts load', () => {
     expect(storySystem(promptsDir)).toContain('One Minute WTF');
     expect(topicsSystem(promptsDir)).toContain('research agent');
+  });
+});
+
+describe('research prompt', () => {
+  const base = { count: 8, catalogue: [], liked: [], disliked: [] };
+
+  it('fills every placeholder and states the rubric with its weights', () => {
+    const prompt = buildResearchPrompt(promptsDir, base);
+    expect(prompt).toContain('Find 8 true-story candidates');
+    expect(prompt).toMatch(/- visual \(weight 3\):/);
+    expect(prompt).toMatch(/- novelty \(weight 1\):/);
+    expect(prompt).toContain('source_url');
+    expect(prompt).not.toMatch(/\{\{\w+\}\}/);
+    expect(prompt).not.toContain('CATALOGUE');
+    expect(prompt).not.toContain('PRODUCER FEEDBACK');
+    expect(prompt).not.toContain('FOCUS');
+  });
+
+  it('lists the catalogue with a coarse status and the focus brief', () => {
+    const prompt = buildResearchPrompt(promptsDir, {
+      ...base,
+      brief: '1970s maritime',
+      catalogue: [
+        { topic: 'Lake Nyos', status: 'published' },
+        { topic: 'Banqiao Dam', status: 'render_review' },
+        { topic: 'Tacoma', status: 'story_review' },
+        { topic: 'Bad one', status: 'failed' },
+      ],
+    });
+    expect(prompt).toContain('FOCUS from the producer for this run: 1970s maritime');
+    expect(prompt).toContain('- Lake Nyos [published]');
+    expect(prompt).toContain('- Banqiao Dam [rendered]');
+    expect(prompt).toContain('- Tacoma [in progress]');
+    expect(prompt).toContain('- Bad one [failed]');
+  });
+
+  it('groups rejections by reason with the teaching line, and lists likes as "more like these"', () => {
+    const prompt = buildResearchPrompt(promptsDir, {
+      ...base,
+      liked: [{ topic: 'Lituya Bay 1958', hook: 'A wave stripped the mountain bare.' }],
+      disliked: [
+        { topic: 'Roswell', hook: 'x', reason: 'not_verifiable', note: null },
+        { topic: 'Some ledger', hook: 'x', reason: 'not_visual', note: 'all paperwork' },
+        { topic: 'Another ledger', hook: 'x', reason: 'not_visual', note: null },
+      ],
+    });
+    expect(prompt).toContain('Liked — more like these');
+    expect(prompt).toContain('- Lituya Bay 1958 — "A wave stripped the mountain bare."');
+    expect(prompt).toMatch(/as NOT VISUAL \(the event has no moment a camera would have caught in progress\):\n {4}- Some ledger — producer: "all paperwork"\n {4}- Another ledger/);
+    expect(prompt).toMatch(/as NOT VERIFIABLE \(.*\):\n {4}- Roswell/);
+    expect(researchSystem(promptsDir)).toContain('inventing a URL is worse');
   });
 });

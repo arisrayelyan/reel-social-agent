@@ -30,7 +30,14 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
 
   app.decorate('config', config);
 
-  await app.register(cors, { origin: config.corsOrigin });
+  // Methods must be explicit: @fastify/cors answers preflights with
+  // GET,HEAD,POST by default, so every PATCH/DELETE/PUT from the dashboard
+  // was refused by the browser as "Network Error" (found 4 Sep 2026 on the
+  // research like/dislike; the video delete button had the same fault).
+  await app.register(cors, {
+    origin: config.corsOrigin,
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
   await app.register(postgresPlugin, { config });
   await app.register(redisPlugin, { config });
   await app.register(queuePlugin);

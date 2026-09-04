@@ -253,6 +253,26 @@ describe('system prompts', () => {
     expect(system).toMatch(/\[sigh\]/);
   });
 
+  it('the research prompts state the rubric, the source rule and the hard rejects', () => {
+    const user = loadPrompt(promptsDir, 'research.user.md');
+    const system = loadPrompt(promptsDir, 'research.system.md');
+    for (const re of [
+      /SCORING AXES/,
+      /\{\{rubric_block\}\}/,
+      /source_url — ONE primary article or source/,
+      /HARD REJECTS/,
+      /living public figure/,
+      /children in danger/,
+      /recent or ongoing crisis event/,
+      /only evidence is paperwork/,
+      /\{\{catalogue_block\}\}\{\{feedback_block\}\}/,
+    ]) {
+      expect(user).toMatch(re);
+    }
+    expect(system).toMatch(/inventing a URL is worse than leaving a candidate out/);
+    expect(system).toMatch(/single JSON object/);
+  });
+
   it('the topics system prompt scores for audience relevance', () => {
     expect(topicsSystem(promptsDir)).toContain('research agent');
     expect(topicsSystem(promptsDir)).toMatch(/twenty-year-old with zero context/);

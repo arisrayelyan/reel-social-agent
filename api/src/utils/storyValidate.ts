@@ -1089,6 +1089,22 @@ export const STORY_RULES: readonly StoryRule[] = [
     },
   },
   {
+    id: 'image.monochrome',
+    severity: 'error', field: 'style_prefix', scope: 'story', tier: 1,
+    source: `${STYLE_DOC} §1 (colour, always)`,
+    check: (ctx, emit) => {
+      const re = /\b(black[- ]and[- ]white|b&w|monochrom\w*|grey ?scale|gray ?scale|sepia|desaturat\w*|colou?rless)\b/i;
+      const prefixHit = ctx.story.style_prefix.match(re);
+      if (prefixHit) {
+        emit(null, `style_prefix asks for a monochrome look ("${prefixHit[0]}") — every frame is in full colour; use the era's colour process from the table`, prefixHit[0]);
+      }
+      for (const beat of ctx.story.beats) {
+        const hit = beat.image_prompt.match(re);
+        if (hit) emit(beat.index, `image_prompt asks for a monochrome look ("${hit[0]}") — colourless frames read as a photo montage`, hit[0]);
+      }
+    },
+  },
+  {
     id: 'style.era_truth',
     severity: 'warning', field: 'style_prefix', scope: 'story', tier: 2,
     source: `${STYLE_DOC} §6 (the medium follows the era of the event)`,

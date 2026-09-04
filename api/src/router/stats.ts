@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 
 export async function statsRouter(app: FastifyInstance): Promise<void> {
   app.get('/stats', async () => {
-    const [videos, runs] = await Promise.all([
+    const [videos, runs, unattributed] = await Promise.all([
       app.pg.query<{ status: string; count: string; cost: string }>(
         `SELECT status, COUNT(*) AS count, COALESCE(SUM(total_cost_usd), 0) AS cost
            FROM videos GROUP BY status`,
@@ -10,6 +10,10 @@ export async function statsRouter(app: FastifyInstance): Promise<void> {
       app.pg.query<{ provider: string; count: string; cost: string }>(
         `SELECT provider, COUNT(*) AS count, COALESCE(SUM(cost_usd), 0) AS cost
            FROM generation_runs GROUP BY provider`,
+      ),
+      // research runs and topic suggestions have no video to carry their cost
+      app.pg.query<{ cost: string }>(
+        `SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM generation_runs WHERE video_id IS NULL`,
       ),
     ]);
 
@@ -26,6 +30,7 @@ export async function statsRouter(app: FastifyInstance): Promise<void> {
       cost_by_provider: Object.fromEntries(
         runs.rows.map((r) => [r.provider, Number(Number(r.cost).toFixed(4))]),
       ),
+      research_cost_usd: Number(Number(unattributed.rows[0]?.cost ?? 0).toFixed(4)),
     };
   });
 }

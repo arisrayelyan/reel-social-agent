@@ -150,7 +150,8 @@ const CASES: RuleCase[] = [
   { rule: 'style.negatives', mutate: (s) => { s.style_prefix = `${s.style_prefix} no people, no cars.`; } },
   { rule: 'style.vertical_clause', mutate: (s) => { s.style_prefix = s.style_prefix.replace('vertical 9:16 composition, ', ''); } },
   { rule: 'style.skeleton', mutate: (s) => { s.style_prefix = s.style_prefix.replace('documentary evidence photograph', 'a nice photo'); } },
-  { rule: 'style.capture_medium', mutate: (s) => { s.style_prefix = s.style_prefix.replace('sheet film', 'Kodachrome 64 slide film'); } },
+  { rule: 'style.capture_medium', mutate: (s) => { s.style_prefix = s.style_prefix.replace('Autochrome colour plate', 'Autochrome colour plate and Kodachrome 64 slide film'); } },
+  { rule: 'image.monochrome', mutate: (s) => { s.style_prefix = s.style_prefix.replace('Autochrome colour plate, soft pointillist grain, muted pastel colour, warm cast', 'large-format black and white sheet film, deep tonal range'); } },
   { rule: 'style.era_truth', mutate: (s) => { s.evidence_stamp = 'BOSTON, MASSACHUSETTS — JANUARY 2019'; } },
 
   // ── overlay hook and stamp ──

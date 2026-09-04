@@ -63,6 +63,11 @@ export class FirecrawlClient {
     };
   }
 
+  /** Web search for a research candidate's source; see searchWeb. */
+  async search(query: string, limit = 3): Promise<SearchHit[]> {
+    return searchWeb(this.firecrawl, query, limit);
+  }
+
   /** Batch-scrapes secondary pages; per-page failures are dropped, not fatal. */
   async scrapeMany(urls: string[]): Promise<ScrapedPage[]> {
     if (urls.length === 0) return [];
@@ -103,6 +108,33 @@ export function extractLinkedUrls(markdown: string, sourceUrl: string, max: numb
     out.push(url);
   }
   return out;
+}
+
+/** One web search hit; description is the engine snippet. */
+export interface SearchHit {
+  url: string;
+  title: string | null;
+  description: string | null;
+}
+
+/**
+ * Web search for grounding a research candidate (2 credits per 10 results).
+ * Returns only `web` hits — news and images are not what a source link needs.
+ */
+export async function searchWeb(
+  firecrawl: Pick<Firecrawl, 'search'>,
+  query: string,
+  limit = 3,
+): Promise<SearchHit[]> {
+  const data = await firecrawl.search(query, { limit, sources: ['web'] });
+  const hits = (data.web ?? []) as Array<{ url?: string; title?: string; description?: string; metadata?: { url?: string; title?: string } }>;
+  return hits
+    .map((h) => ({
+      url: h.url ?? h.metadata?.url ?? '',
+      title: h.title ?? h.metadata?.title ?? null,
+      description: h.description ?? null,
+    }))
+    .filter((h) => /^https?:\/\//i.test(h.url));
 }
 
 /** Not a photograph of the event: UI furniture, flags, badges, tracking pixels. */

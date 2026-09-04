@@ -1,18 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { CURSOR_BASE_MODELS, DEFAULT_CURSOR_MODEL, type Provider, type TopicIdea } from '@reel-agent/shared';
+import { Link, useNavigate } from 'react-router-dom';
+import { DEFAULT_CURSOR_MODEL, type Provider, type TopicIdea } from '@reel-agent/shared';
 import { Button, Card, Pill, SectionLabel } from '@/components/design';
-import { CursorModelSelect } from '@/components/CursorModelSelect';
+import { ProviderPicker, providerLabel } from '@/components/ProviderPicker';
 import { useVideoMutations } from '@/hooks/useVideoMutations';
-
-// Ollama is temporarily hidden from this page (2 Sep 2026): a qwen3.6 story
-// generation exhausted the laptop mid-session. The provider still exists in
-// the API and the shared Provider type; restore the entry to bring it back.
-const PROVIDERS: Array<{ value: Provider; label: string; note: string }> = [
-  { value: 'claude-code', label: 'Claude Code', note: 'paid, best quality' },
-  { value: 'codex', label: 'Codex', note: 'paid' },
-  { value: 'cursor-agent', label: 'Cursor Agent', note: `paid · ${CURSOR_BASE_MODELS.length} models` },
-];
 
 type Mode = 'topic' | 'url';
 
@@ -88,42 +79,12 @@ export function GeneratePage() {
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto' }}>
-      <SectionLabel>Model</SectionLabel>
-      <div style={{ display: 'flex', gap: 8, marginBottom: provider === 'cursor-agent' ? 10 : 24 }}>
-        {PROVIDERS.map((p) => (
-          <Card
-            key={p.value}
-            style={{
-              flex: 1,
-              cursor: 'pointer',
-              padding: 12,
-              borderColor: provider === p.value ? 'var(--accent)' : 'var(--line)',
-              background: provider === p.value ? 'rgba(232,184,75,0.06)' : 'var(--bg-1)',
-            }}
-          >
-            <label style={{ cursor: 'pointer', display: 'block' }}>
-              <input
-                type="radio"
-                name="provider"
-                checked={provider === p.value}
-                onChange={() => setProvider(p.value)}
-                style={{ display: 'none' }}
-              />
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{p.label}</div>
-              <div style={{ color: 'var(--text-3)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>{p.note}</div>
-            </label>
-          </Card>
-        ))}
-      </div>
-
-      {provider === 'cursor-agent' && (
-        <CursorModelSelect
-          value={cursorModel}
-          onChange={setCursorModel}
-          showId
-          style={{ marginBottom: 24 }}
-        />
-      )}
+      <ProviderPicker
+        provider={provider}
+        cursorModel={cursorModel}
+        onProviderChange={setProvider}
+        onCursorModelChange={setCursorModel}
+      />
 
       <SectionLabel>Source</SectionLabel>
       <div style={{ display: 'flex', gap: 0, marginBottom: 12 }}>
@@ -178,6 +139,12 @@ export function GeneratePage() {
             <Button variant="ghost" disabled={suggestTopics.isPending || starting} onClick={suggest}>
               {suggestTopics.isPending ? 'Suggesting…' : 'Suggest topics'}
             </Button>
+            <Link
+              to="/research"
+              style={{ marginLeft: 'auto', alignSelf: 'center', fontSize: 12, color: 'var(--info)' }}
+            >
+              Deeper research: ranked, with sources →
+            </Link>
           </div>
           {generateStory.isPending && (
             <div style={{ marginTop: 12, color: 'var(--text-2)', fontSize: 12 }}>
@@ -231,7 +198,7 @@ export function GeneratePage() {
               </Card>
             ))}
             <div style={{ color: 'var(--text-2)', fontSize: 12 }}>
-              Thinking of fresh topics with {PROVIDERS.find((p) => p.value === provider)?.label}… this can take a minute or two.
+              Thinking of fresh topics with {providerLabel(provider)}… this can take a minute or two.
             </div>
           </div>
         </>

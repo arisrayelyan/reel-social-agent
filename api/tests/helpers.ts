@@ -42,7 +42,7 @@ export async function buildTestApp(): Promise<FastifyInstance> {
 
 export async function truncateAll(app: FastifyInstance): Promise<void> {
   await app.pg.query(
-    'TRUNCATE videos, generation_runs, assets, publications, oauth_tokens, settings RESTART IDENTITY CASCADE',
+    'TRUNCATE videos, generation_runs, assets, publications, oauth_tokens, settings, research_runs, story_candidates RESTART IDENTITY CASCADE',
   );
 }
 

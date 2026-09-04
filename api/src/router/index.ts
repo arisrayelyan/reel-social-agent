@@ -5,6 +5,7 @@ import { generateRouter } from './generate.js';
 import { settingsRouter } from './settings.js';
 import { tiktokRouter } from './tiktok.js';
 import { statsRouter } from './stats.js';
+import { researchRouter } from './research.js';
 
 /** All feature routers mount under a single /api prefix. */
 export async function registerRouter(app: FastifyInstance): Promise<void> {
@@ -15,6 +16,7 @@ export async function registerRouter(app: FastifyInstance): Promise<void> {
       await api.register(settingsRouter);
       await api.register(tiktokRouter);
       await api.register(statsRouter);
+      await api.register(researchRouter);
       api.get('/health', async () => ({ ok: true }));
     },
     { prefix: '/api' },

@@ -86,6 +86,7 @@ Open http://localhost:4040. The Settings page shows live health for every servic
 | `FAL_VIDEO_MODEL` | i2v endpoint | default `minimax/h3-max/image-to-video` |
 | `FIRECRAWL_API_KEY` | generate-from-URL scraping | https://www.firecrawl.dev → dashboard → API Keys (`fc-…`) |
 | `FIRECRAWL_MAX_LINKED_PAGES` | linked pages also scraped per article | default `0` = main URL only (each extra page = 1 credit ≈ $0.005) |
+| _(Research page)_ | `/research` finds and ranks true-story candidates with the chosen model, checks each source link, and learns from your like/dislike; the optional web-search checkbox costs 2 Firecrawl credits per candidate | — |
 | `FIRECRAWL_MAX_SOURCE_IMAGES` / `SOURCE_IMAGE_ANALYSIS` | photos taken from the page's main content and described by the story provider for the image prompts | defaults `4` / `true` |
 | `OLLAMA_URL` / `OLLAMA_MODEL` / `OLLAMA_EMBED_MODEL` | free local LLM + embeddings | `http://localhost:11434`, `qwen3.6:latest`, `qwen3-embedding:0.6b` |
 | `CLAUDE_CLI_PATH` / `CODEX_CLI_PATH` / `CURSOR_CLI_PATH` | CLI story generators | `claude` / `codex` / `cursor-agent` (uses your existing logins) |

@@ -390,23 +390,30 @@ export interface CaptureMedium {
 
 /**
  * The capture medium follows the era of the EVENT, not the mood. A 2023 story
- * in Tri-X is a lie; the channel promise is truth (visual-style.md §6).
+ * on Autochrome is a lie; the channel promise is truth (visual-style.md §6).
+ *
+ * Every medium here is a COLOUR process (4 Sep 2026). The table used to hand
+ * pre-1965 stories silver gelatin, black-and-white sheet film and Tri-X, and
+ * the producer's verdict was that monochrome frames do not hold a viewer —
+ * they read as a photo montage. Period colour existed for every era the
+ * channel covers: hand-tinted prints before 1900, Autochrome from 1907, colour
+ * slide film from 1935. The era is still honest; only the palette changed.
  */
 export const CAPTURE_MEDIA: readonly CaptureMedium[] = [
   {
-    id: 'silver_gelatin', era: 'pre-1900', from: 0, to: 1899,
-    keywords: ['gelatin', 'silver gelatin plate'],
-    line: 'silver gelatin plate, warm sepia tone, tunnel vignette, soft optics',
+    id: 'hand_tinted', era: 'pre-1900', from: 0, to: 1899,
+    keywords: ['hand-tinted', 'hand tinted', 'albumen'],
+    line: 'hand-tinted albumen print, warm muted colour wash, soft optics, tunnel vignette',
   },
   {
-    id: 'sheet_film', era: '1900–1945', from: 1900, to: 1945,
-    keywords: ['sheet film', 'large-format black and white'],
-    line: 'large-format black and white sheet film, deep tonal range, hard flash shadow',
+    id: 'autochrome', era: '1900–1935', from: 1900, to: 1935,
+    keywords: ['autochrome'],
+    line: 'Autochrome colour plate, soft pointillist grain, muted pastel colour, warm cast',
   },
   {
-    id: 'tri_x', era: '1946–1965', from: 1946, to: 1965,
-    keywords: ['tri-x'],
-    line: 'Tri-X black and white film, high mid-tone contrast, gritty shadow grain',
+    id: 'ektachrome', era: '1936–1965', from: 1936, to: 1965,
+    keywords: ['ektachrome'],
+    line: 'early Ektachrome colour slide film, gentle saturation, cool shadows, warm highlights, fine grain',
   },
   {
     id: 'kodachrome', era: '1966–1979', from: 1966, to: 1979,

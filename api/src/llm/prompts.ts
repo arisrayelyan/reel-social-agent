@@ -1,9 +1,11 @@
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import {
+  DISLIKE_REASONS,
   HOOK_EXAMPLE_POOL,
   HOOK_UPGRADE_PAIRS,
   MUSIC_GENRES,
+  RESEARCH_SCORE_AXES,
   SLOP_PHRASES_PROMPT_SAMPLE,
   TARGET_DURATION_SECONDS,
   TARGET_WORD_COUNT,
@@ -26,6 +28,8 @@ const PROMPT_FILES = [
   'topics.system.md',
   'topics.user.md',
   'source-images.user.md',
+  'research.system.md',
+  'research.user.md',
 ] as const;
 export type PromptName = (typeof PROMPT_FILES)[number];
 
@@ -227,5 +231,78 @@ export function buildTopicPrompt(
   return renderTemplate(loadPrompt(promptsDir, 'topics.user.md'), {
     count,
     existing_topics_block: existingBlock,
+  });
+}
+
+export function researchSystem(promptsDir: string): string {
+  return loadPrompt(promptsDir, 'research.system.md');
+}
+
+export interface ResearchPromptInput {
+  count: number;
+  brief?: string | null;
+  /** Every video already made, with a coarse status — the "avoid" list and the "this worked" list. */
+  catalogue: Array<{ topic: string; status: string }>;
+  liked: Array<{ topic: string; hook: string }>;
+  disliked: Array<{ topic: string; hook: string; reason: string | null; note: string | null }>;
+}
+
+function catalogueStatus(status: string): string {
+  if (status === 'published' || status === 'publishing') return 'published';
+  if (status === 'render_review' || status === 'rendering' || status === 'approved') return 'rendered';
+  if (status === 'failed') return 'failed';
+  return 'in progress';
+}
+
+/**
+ * The research brief. Three blocks make each run better than the last: the
+ * catalogue (never repeat, and the published ones show what works), the
+ * producer's likes (more of this mechanism), and the dislikes grouped by
+ * reason so the model learns the CLASS of rejection, not just the topic.
+ */
+export function buildResearchPrompt(promptsDir: string, input: ResearchPromptInput): string {
+  const focusBlock = input.brief?.trim()
+    ? `\nFOCUS from the producer for this run: ${input.brief.trim()}\n`
+    : '';
+  const rubricBlock = RESEARCH_SCORE_AXES.map((a) => `- ${a.key} (weight ${a.weight}): ${a.teach}.`).join('\n');
+
+  const catalogueBlock = input.catalogue.length
+    ? `\n\nCATALOGUE — already made. Never propose these or anything that is the same event in different words. The published ones are what "works" looks like on this channel:\n` +
+      input.catalogue.map((v) => `- ${v.topic} [${catalogueStatus(v.status)}]`).join('\n')
+    : '';
+
+  let feedbackBlock = '';
+  if (input.liked.length || input.disliked.length) {
+    feedbackBlock = '\n\nPRODUCER FEEDBACK from earlier research runs:';
+    if (input.liked.length) {
+      feedbackBlock +=
+        '\nLiked — more like these: same kind of mechanism and picture, a DIFFERENT event:\n' +
+        input.liked.map((c) => `- ${c.topic} — "${c.hook}"`).join('\n');
+    }
+    if (input.disliked.length) {
+      feedbackBlock += '\nRejected — do not propose these, and avoid the class of problem each group names:';
+      const groups = new Map<string, typeof input.disliked>();
+      for (const c of input.disliked) {
+        const key = c.reason ?? 'other';
+        groups.set(key, [...(groups.get(key) ?? []), c]);
+      }
+      for (const [reason, items] of groups) {
+        const def = DISLIKE_REASONS.find((r) => r.id === reason);
+        const label = (def?.label ?? reason).toUpperCase();
+        const teach = def?.teach ?? 'see the producer note';
+        feedbackBlock += `\n- as ${label} (${teach}):`;
+        for (const c of items) {
+          feedbackBlock += `\n    - ${c.topic}${c.note ? ` — producer: "${c.note}"` : ''}`;
+        }
+      }
+    }
+  }
+
+  return renderTemplate(loadPrompt(promptsDir, 'research.user.md'), {
+    count: input.count,
+    focus_block: focusBlock,
+    rubric_block: rubricBlock,
+    catalogue_block: catalogueBlock,
+    feedback_block: feedbackBlock,
   });
 }

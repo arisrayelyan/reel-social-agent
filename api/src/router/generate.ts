@@ -42,6 +42,7 @@ import {
   updateVideoStory,
 } from '../database/queries/videos.js';
 import { insertGenerationRun } from '../database/queries/generationRuns.js';
+import { linkCandidateVideo } from '../database/queries/storyCandidates.js';
 import { publishEvent } from '../pipeline/events.js';
 
 /** Hard reject when an explicit topic nearly duplicates an existing video. */
@@ -409,6 +410,15 @@ function runUrlStoryGeneration(
   })();
 }
 
+/** Research → video link; a stale candidate id must never fail a generation. */
+async function linkCandidate(app: FastifyInstance, candidateId: number, videoId: number): Promise<void> {
+  try {
+    await linkCandidateVideo(app, candidateId, videoId);
+  } catch (err) {
+    app.log.warn({ err, candidateId, videoId }, 'could not link research candidate to video');
+  }
+}
+
 export async function generateRouter(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -420,7 +430,7 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
     '/generate/story',
     { schema: { body: GenerateStoryBodySchema } },
     async (request, reply) => {
-      const { topic, provider: providerName, model, change_request, video_id } = request.body;
+      const { topic, provider: providerName, model, change_request, video_id, candidate_id } = request.body;
       const provider = getProvider(app.config, providerName, model);
 
       // — regeneration of an existing draft —
@@ -465,6 +475,7 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
       }
 
       const video = await createDraftVideo(app, { topic, embedding });
+      if (candidate_id) await linkCandidate(app, candidate_id, video.id);
       runStoryGeneration(app, {
         videoId: video.id,
         topic,
@@ -487,7 +498,7 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
     '/generate/from-url',
     { schema: { body: GenerateFromUrlBodySchema } },
     async (request, reply) => {
-      const { url, provider: providerName, model } = request.body;
+      const { url, provider: providerName, model, candidate_id } = request.body;
       const provider = getProvider(app.config, providerName, model);
       if (!app.config.firecrawlApiKey) {
         return reply.code(400).send({
@@ -496,6 +507,7 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
       }
 
       const video = await createDraftVideo(app, { topic: url, embedding: null, sourceUrl: url });
+      if (candidate_id) await linkCandidate(app, candidate_id, video.id);
       runUrlStoryGeneration(app, { videoId: video.id, url, providerName, provider });
       return reply.code(202).send({ video });
     },

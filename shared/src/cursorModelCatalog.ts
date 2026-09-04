@@ -140,3 +140,11 @@ export function cursorSupports(
  * override with CURSOR_MODEL, or per-request from the Generate page.
  */
 export const DEFAULT_CURSOR_MODEL = 'claude-opus-5-thinking-high';
+
+/**
+ * Research default (4 Sep 2026). Grok sits in Cursor's in-subscription pool,
+ * so a research run costs cents, and ranking candidates is a breadth task,
+ * not the one worth paying Opus for. Resolved through the catalogue by the
+ * page: if the id is ever retired, the picker falls back to DEFAULT_CURSOR_MODEL.
+ */
+export const DEFAULT_RESEARCH_MODEL = 'cursor-grok-4.6-high';

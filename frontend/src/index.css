@@ -95,3 +95,49 @@ a:focus-visible {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
 }
+
+/* Data tables (research desk). Header in the console's mono labelling voice,
+   numeric cells right-aligned, the whole row is the link. */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.data-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.data-table th.num,
+.data-table td.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.data-table tr.row-link {
+  cursor: pointer;
+}
+.data-table tr.row-link:hover td {
+  background: var(--bg-2);
+}
+.data-table tr.row-link:focus-visible td {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.data-table tr.subrow td {
+  background: var(--bg-0);
+  padding-top: 8px;
+  padding-bottom: 12px;
+}

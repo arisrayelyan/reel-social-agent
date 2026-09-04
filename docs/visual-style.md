@@ -12,6 +12,7 @@ This replaces "archival = old". Old stories get period stock; fresh stories get 
 - **Kicker ritual**: haunting loopable final frame, stamp-free, so the loop is clean.
 - **AI RECONSTRUCTION tag** (Remotion): small mono line under the first stamp. TikTok requires AIGC that shows realistic scenes or people to be labelled, and every reel on this channel is a reconstructed crisis event. `RECONSTRUCTION_TAG=false` turns it off; do not.
 - **People in frame** (§7): anonymous figures and faces are part of the record. The old `no people` line is gone from the prefix and the motion negatives.
+- **Colour, always** (added 4 Sep 2026). Every frame is in full natural colour and every clip stays in colour with no fade to black or white. The era table used to give pre-1965 stories silver gelatin, black-and-white sheet film and Tri-X; the producer's verdict after the first reels was that monochrome frames do not hold a viewer — they read as a photo montage. Period colour exists for every era (hand-tinted prints, Autochrome from 1907, colour slide film from 1935), so the era stays honest and only the palette changed. `image.monochrome` (error) rejects any monochrome ask in the prefix or a beat; `IMAGE_PROMPT_SUFFIX` and `MOTION_NEGATIVES` carry the colour clause to Gemini and fal regardless.
 
 ## 2. Root `DEFAULT_STYLE_PREFIX` (drop-in for `shared/src/constants.ts`)
 
@@ -40,9 +41,9 @@ Historical:
 
 | Era | Capture medium line |
 |---|---|
-| pre-1900 | silver gelatin plate, warm sepia tone, tunnel vignette, soft optics |
-| 1900–1945 | large-format black and white sheet film, deep tonal range, hard flash shadow |
-| 1946–1965 | Tri-X black and white film, high mid-tone contrast, gritty shadow grain |
+| pre-1900 | hand-tinted albumen print, warm muted colour wash, soft optics, tunnel vignette |
+| 1900–1935 | Autochrome colour plate, soft pointillist grain, muted pastel colour, warm cast |
+| 1936–1965 | early Ektachrome colour slide film, gentle saturation, cool shadows, warm highlights, fine grain |
 | 1966–1979 | Kodachrome 64 slide film, saturated reds, deep daylight blue — or faded color negative, orange-magenta cast, lifted blacks, for quieter stories |
 | 1980–1995 | Kodak Gold 200 consumer color negative, punchy color, magenta lean, visible grain, mild halation — or Portra warmth for quieter stories |
 | 1996–2010 | 35mm point-and-shoot color negative, mild barrel distortion, soft edges — or early compact digital, small-sensor noise, harsh on-camera flash indoors |
@@ -88,7 +89,7 @@ surface wear, vertical 9:16 composition, cinematic.
 - `postProcessStory`: warn unless the story's `style_prefix` contains exactly one capture-medium phrase from the table (substring check against a keyword list: "gelatin", "sheet film", "Tri-X", "Kodachrome", "color negative", "Kodak Gold", "Portra", "point-and-shoot", "compact digital", "smartphone", "flagship-phone", "DSLR", "mirrorless", "drone", "monitoring-camera"). Warning only, producer decides.
 - Filled prefix is copied byte-identical across every beat (pipeline-learnings rule, unchanged).
 - Overlay stamps are Remotion-rendered only — never ask the image model for text (the `no text` suffix stays).
-- Era of the *capture medium* follows the era of the *event*, not the mood. A 2023 story in Tri-X is a lie; the channel promise is truth.
+- Era of the *capture medium* follows the era of the *event*, not the mood. A 2023 story on Autochrome is a lie; the channel promise is truth.
 
 ## 7. People and spectacle (added 2 Sep 2026)
 

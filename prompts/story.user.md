@@ -81,13 +81,14 @@ STYLE — style_prefix (one reusable line for THIS story):
 - Build it from this exact skeleton, filled for this story:
   "documentary evidence photograph, [CAPTURE MEDIUM from the table below], [explicit real geography: region, architecture, vegetation, soil], [ONE signature light: source + direction + colour], honest shadows, real surface wear, vertical 9:16 composition, cinematic."
 - Pick exactly ONE capture medium. Never mix eras or media.
-- The medium follows the era of the EVENT, not the mood. A twenty-twenties story shot on Tri-X is a lie, and the channel promise is truth.
+- The medium follows the era of the EVENT, not the mood. A twenty-twenties story shot on Autochrome is a lie, and the channel promise is truth.
+- COLOUR, always. Every frame is in full natural colour: never black-and-white, monochrome, sepia-only, greyscale or desaturated, and never a fade to black or white. A colourless frame reads as a photo montage and the viewer swipes. Old stories use the period's COLOUR process from the table, not a monochrome one.
 
 | Era of the event | Capture medium line |
 |---|---|
-| pre-1900 | silver gelatin plate, warm sepia tone, tunnel vignette, soft optics |
-| 1900–1945 | large-format black and white sheet film, deep tonal range, hard flash shadow |
-| 1946–1965 | Tri-X black and white film, high mid-tone contrast, gritty shadow grain |
+| pre-1900 | hand-tinted albumen print, warm muted colour wash, soft optics, tunnel vignette |
+| 1900–1935 | Autochrome colour plate, soft pointillist grain, muted pastel colour, warm cast |
+| 1936–1965 | early Ektachrome colour slide film, gentle saturation, cool shadows, warm highlights, fine grain |
 | 1966–1979 | Kodachrome 64 slide film, saturated reds, deep daylight blue — or faded colour negative, orange-magenta cast, lifted blacks, for quieter stories |
 | 1980–1995 | Kodak Gold 200 consumer colour negative, punchy colour, magenta lean, visible grain, mild halation — or Portra warmth for quieter stories |
 | 1996–2010 | 35mm point-and-shoot colour negative, mild barrel distortion, soft edges — or early compact digital, small-sensor noise, harsh on-camera flash indoors |

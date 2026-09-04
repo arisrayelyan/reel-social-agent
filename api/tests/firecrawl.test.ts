@@ -3,11 +3,13 @@ import { loadConfig } from '../src/config.js';
 
 const scrape = vi.fn();
 const batchScrape = vi.fn();
+const search = vi.fn();
 vi.mock('firecrawl', () => ({
   // must be constructible — the client does `new Firecrawl(...)`
   default: class {
     scrape = scrape;
     batchScrape = batchScrape;
+    search = search;
   },
 }));
 
@@ -26,6 +28,7 @@ describe('FirecrawlClient', () => {
   beforeEach(() => {
     scrape.mockReset();
     batchScrape.mockReset();
+    search.mockReset();
   });
 
   it('throws without an API key', () => {
@@ -55,6 +58,23 @@ describe('FirecrawlClient', () => {
       excludeTags: ['nav', 'header', 'footer', 'aside', 'form', 'iframe', 'script', 'style'],
       timeout: 60_000,
     });
+  });
+
+  it('search returns web hits only, tolerating both SDK result shapes', async () => {
+    search.mockResolvedValue({
+      web: [
+        { url: 'https://en.wikipedia.org/wiki/Banqiao_Dam', title: 'Banqiao Dam', description: 'A dam in Henan' },
+        { metadata: { url: 'https://damfailures.org/x', title: 'Case study' }, markdown: '...' },
+        { url: 'mailto:nope' },
+      ],
+      news: [{ url: 'https://news.example.com/a', title: 'ignored' }],
+    });
+    const hits = await new FirecrawlClient(testConfig()).search('Banqiao Dam 1975', 3);
+    expect(search).toHaveBeenCalledWith('Banqiao Dam 1975', { limit: 3, sources: ['web'] });
+    expect(hits).toEqual([
+      { url: 'https://en.wikipedia.org/wiki/Banqiao_Dam', title: 'Banqiao Dam', description: 'A dam in Henan' },
+      { url: 'https://damfailures.org/x', title: 'Case study', description: null },
+    ]);
   });
 
   it('scrapeMany applies the same main-content filter as scrape', async () => {

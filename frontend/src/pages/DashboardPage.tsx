@@ -78,6 +78,7 @@ export function DashboardPage() {
         <Stat label="Awaiting your review" value={awaitingReview} tone={awaitingReview > 0 ? 'var(--info)' : undefined} />
         <Stat label="Total spend" value={`$${(stats?.total_cost_usd ?? 0).toFixed(2)}`} />
         <Stat label="Avg cost / video" value={`$${(stats?.avg_cost_usd ?? 0).toFixed(2)}`} />
+        <Stat label="Research spend" value={`$${Number(stats?.research_cost_usd ?? 0).toFixed(2)}`} />
       </div>
 
       <SectionLabel>Production queue</SectionLabel>

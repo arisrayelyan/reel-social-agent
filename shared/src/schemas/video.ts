@@ -65,12 +65,15 @@ export const GenerateStoryBodySchema = z.object({
   change_request: z.string().optional(),
   /** When regenerating an existing video. */
   video_id: z.number().int().positive().optional(),
+  /** Research candidate this story was started from — linked, never required. */
+  candidate_id: z.number().int().positive().optional(),
 });
 
 export const GenerateFromUrlBodySchema = z.object({
   url: z.url({ protocol: /^https?$/ }),
   provider: ProviderSchema,
   model: ModelOverrideSchema,
+  candidate_id: z.number().int().positive().optional(),
 });
 
 /**

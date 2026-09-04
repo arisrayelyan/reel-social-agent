@@ -3,6 +3,8 @@ import { useStats } from '@/hooks/useStats';
 
 function pageTitle(pathname: string): string {
   if (pathname === '/') return 'Dashboard';
+  if (/^\/research\/\d+/.test(pathname)) return 'Research run';
+  if (pathname.startsWith('/research')) return 'Story research';
   if (pathname.startsWith('/generate')) return 'Generate story';
   if (pathname.startsWith('/videos/')) return 'Video';
   if (pathname.startsWith('/settings')) return 'Settings';

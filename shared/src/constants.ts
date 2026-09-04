@@ -127,7 +127,7 @@ export const VIDEO = { width: 1080, height: 1920, fps: 30 } as const;
  * Must be byte-identical across every shot of a video: the server injects it,
  * the LLM never writes it (pipeline-learnings §4). Per-story prefixes fill the
  * same skeleton with a capture medium chosen for the era of the EVENT — see
- * CAPTURE_MEDIA in craft.ts. A 2023 story shot on Tri-X is a lie.
+ * CAPTURE_MEDIA in craft.ts. A 2023 story shot on Autochrome is a lie.
  *
  * The overlapping negatives from the doc's §2 text are omitted on purpose:
  * buildImagePrompt already appends IMAGE_PROMPT_SUFFIX, and emitting
@@ -146,7 +146,8 @@ export const DEFAULT_STYLE_PREFIX =
  * literal "AUGUST 14:2024" into a keyframe whose beat prompt said "dated frame".
  */
 export const IMAGE_PROMPT_SUFFIX =
-  'single image, no grid, no text, no labels, no watermark, no date stamp, no timestamp overlay';
+  'single image, full natural colour, no black and white, no monochrome, no sepia, no desaturated look, ' +
+  'no grid, no text, no labels, no watermark, no date stamp, no timestamp overlay';
 
 /**
  * Fixed negative block appended to every motion prompt (pipeline-learnings §5).
@@ -159,6 +160,7 @@ export const IMAGE_PROMPT_SUFFIX =
  */
 export const MOTION_NEGATIVES =
   'No cuts. No one turns to face the camera, no speech, no lip movement. ' +
+  'Full colour throughout: no fade to black, no fade to white, no black or white frames, no desaturation. ' +
   'Use only this image, ignore all other references.';
 
 /**
@@ -176,6 +178,7 @@ export const MOTION_NEGATIVES =
  */
 export const MOTION_NEGATIVES_KEYWORDS =
   'cuts, scene changes, subject turning to face the camera, speech, lip movement, ' +
+  'black and white, monochrome, desaturation, fade to black, fade to white, ' +
   'on-screen text, watermark, blur, distortion, low quality';
 
 export const VIDEO_STATUSES = [
@@ -258,3 +261,36 @@ export const LOOP_END_FRAME_EDIT_PROMPT =
   'no watermark.';
 
 export const PROVIDERS = ['ollama', 'claude-code', 'codex', 'cursor-agent'] as const;
+
+/**
+ * The story-research rubric. Each axis is self-scored 1-5 by the research
+ * model and weighted here; the server computes the total, never the model.
+ * Weights follow docs/retention-postmortem-and-change-plan.md: topic supply
+ * was never the failure, execution feasibility was, so what a camera can
+ * show weighs most. `teach` is the one line the prompt uses to define a 5.
+ */
+export const RESEARCH_SCORE_AXES = [
+  { key: 'visual', label: 'Visual', weight: 3, teach: 'the event itself is visible at scale and IN PROGRESS — water, fire, sky, ice, collapse, machines, crowds — and the first frame can hold ONE legible anomaly a viewer reads in a third of a second' },
+  { key: 'hook', label: 'Hook', weight: 2, teach: 'a twenty-year-old with zero context feels the anomaly in the first four words, without background' },
+  { key: 'turn', label: 'Turn', weight: 2, teach: 'the obvious explanation collapses on ONE documented fact, the real mechanism can be stated literally in one breath, and a verified kicker exists' },
+  { key: 'verifiable', label: 'Verifiable', weight: 2, teach: 'two reliable sources support the central claim and nothing load-bearing needs "mysteriously", "some say" or "experts believe"' },
+  { key: 'people', label: 'People', weight: 1, teach: 'people who were there can be shown at work, anonymous and alive — no bodies, no named face, no children in danger' },
+  { key: 'novelty', label: 'Novelty', weight: 1, teach: 'not a TikTok staple already told a thousand times; the audience has not seen this one' },
+] as const;
+export type ResearchScoreAxis = (typeof RESEARCH_SCORE_AXES)[number]['key'];
+
+/**
+ * Why the producer rejected a candidate. Persisted as a plain string (rows
+ * outlive renames, like finding rule ids); `teach` is what the next research
+ * prompt tells the model the rejection means.
+ */
+export const DISLIKE_REASONS = [
+  { id: 'too_well_known', label: 'Too well known', teach: 'the audience has already seen this story everywhere' },
+  { id: 'not_visual', label: 'Not visual', teach: 'the event has no moment a camera would have caught in progress' },
+  { id: 'not_verifiable', label: 'Not verifiable', teach: 'the central claim rests on hearsay or a single shaky source' },
+  { id: 'policy_risk', label: 'Policy risk', teach: 'it cannot be shown without bodies, a real named face, children in danger or a living public figure' },
+  { id: 'weak_hook', label: 'Weak hook', teach: 'the anomaly needs background before it lands' },
+  { id: 'wrong_era_or_region', label: 'Wrong era or region', teach: 'off the brief for time or place' },
+  { id: 'other', label: 'Other', teach: 'see the producer note' },
+] as const;
+export type DislikeReason = (typeof DISLIKE_REASONS)[number]['id'];
