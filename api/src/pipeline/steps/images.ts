@@ -8,6 +8,8 @@ import {
 } from '@reel-agent/shared';
 import { NanoBananaClient } from '../../clients/nanoBanana.js';
 import { buildImagePrompt } from '../../utils/storyPost.js';
+import { stillsNeeded } from '../shots.js';
+import { beatTargetSeconds } from './merge.js';
 import { contentHash } from '../../utils/hash.js';
 import {
   beatPrefix,
@@ -44,17 +46,59 @@ function resolveStylePrefix(stylePrefix: string): { prefix: string; usedFallback
     : { prefix: DEFAULT_STYLE_PREFIX, usedFallback: true };
 }
 
-/** Generates one 9:16 keyframe per beat with the byte-identical style prefix. */
+/**
+ * Generates the 9:16 stills for every beat, with the byte-identical style
+ * prefix — one per SHOT the beat will carry, not one per beat.
+ *
+ * A beat's picture time is split into shots (pipeline/shots.ts), and two crops
+ * of one photograph are a jump cut rather than a cut, so each shot needs its
+ * own frame. Variants share the beat's image_prompt verbatim: separate
+ * generations of one described scene are different compositions of the same
+ * moment, which is exactly what a second angle should be, and it keeps the
+ * narration/picture correspondence the channel promise depends on.
+ *
+ * Variant 0 is the beat's canonical frame — the one the fal clip animates and
+ * the one the kicker's end frame is edited from.
+ */
 export async function runImagesStep(app: FastifyInstance, videoId: number, story: Story): Promise<void> {
   const client = new NanoBananaClient(app.config);
   const imagesDir = await ensureDir(stageDir(app.config.storageDir, videoId, '01_images'));
   // resolved once per video, never per beat - the prefix must be byte-identical
   const { prefix: stylePrefix, usedFallback } = resolveStylePrefix(story.style_prefix);
 
-  await mapLimit(story.beats, IMAGE_CONCURRENCY, async (beat) => {
+  // one still per SHOT: each shot is its own clip generation, and animating
+  // the same still twice would be a jump cut rather than a cut
+  const audio = await findSelectedAssets(app, videoId, 'audio');
+  const audioByBeat = new Map(audio.map((a) => [a.beat_index, a]));
+
+  const jobs = story.beats.flatMap((beat) => {
+    const beatAudio = audioByBeat.get(beat.index);
+    // no audio yet means the tts step has not run; one still is the old
+    // behaviour and the safe floor
+    const targetSeconds = beatAudio?.duration_seconds
+      ? beatTargetSeconds(
+          Number(beatAudio.duration_seconds),
+          beat.index === story.beats.length - 1,
+        )
+      : 0;
+    const count = targetSeconds
+      ? stillsNeeded({ targetSeconds })
+      : 1;
+    return Array.from({ length: count }, (_, variant) => ({ beat, variant, count }));
+  });
+
+  await mapLimit(jobs, IMAGE_CONCURRENCY, async ({ beat, variant, count }) => {
     const prompt = buildImagePrompt(stylePrefix, beat.image_prompt);
-    const hash = contentHash({ prompt, model: app.config.geminiImageModel, kind: 'keyframe' });
-    const existing = await findAssetByHash(app, videoId, 'keyframe', beat.index, hash);
+    // the variant is in the hash so sibling stills of one beat do not collide
+    // on an identical prompt and skip each other as already-generated
+    const hash = contentHash({
+      prompt,
+      model: app.config.geminiImageModel,
+      imageSize: app.config.geminiImageSize,
+      variant,
+      kind: 'keyframe',
+    });
+    const existing = await findAssetByHash(app, videoId, 'keyframe', beat.index, hash, variant);
     if (existing) return;
 
     await publishEvent(app, {
@@ -62,13 +106,16 @@ export async function runImagesStep(app: FastifyInstance, videoId: number, story
       step: 'images',
       status: 'progress',
       beat_index: beat.index,
-      message: `Generating keyframe ${beat.index + 1}/${story.beats.length}`,
+      message:
+        `Generating still ${variant + 1}/${count} for beat ` +
+        `${beat.index + 1}/${story.beats.length}`,
     });
 
-    const take = await nextTakeNumber(app, videoId, 'keyframe', beat.index);
+    const take = await nextTakeNumber(app, videoId, 'keyframe', beat.index, variant);
     const filePath = path.join(
       imagesDir,
-      `${beatPrefix(beat.index)}_${promptSlug(beat.image_prompt)}_v${take}.png`,
+      `${beatPrefix(beat.index)}${variant > 0 ? `_${variant + 1}` : ''}` +
+        `_${promptSlug(beat.image_prompt)}_v${take}.png`,
     );
     const startedAt = Date.now();
     const result = await client.generateImage(prompt, filePath);
@@ -77,6 +124,7 @@ export async function runImagesStep(app: FastifyInstance, videoId: number, story
       videoId,
       beatIndex: beat.index,
       kind: 'keyframe',
+      variant,
       take,
       contentHash: hash,
       filePath: toRelative(app.config.storageDir, filePath),
@@ -91,6 +139,8 @@ export async function runImagesStep(app: FastifyInstance, videoId: number, story
       model: result.model,
       prompt,
       output: {
+        variant,
+        ...(app.config.geminiImageSize ? { image_size: app.config.geminiImageSize } : {}),
         ...(usedFallback
           ? { style_prefix_source: 'default', reason: 'story style_prefix did not fill the Evidence File skeleton' }
           : { style_prefix_source: 'story' }),
@@ -126,8 +176,9 @@ async function generateKickerEndFrame(
   const kicker = story.beats.find((beat) => beat.role === 'kicker');
   if (!kicker) return;
 
+  // variant 0 is the beat's canonical frame; the clip animates that one too
   const keyframe = (await findSelectedAssets(app, videoId, 'keyframe')).find(
-    (asset) => asset.beat_index === kicker.index,
+    (asset) => asset.beat_index === kicker.index && asset.variant === 0,
   );
   if (!keyframe) return;
 

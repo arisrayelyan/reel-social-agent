@@ -49,6 +49,11 @@ function videoWith(findings: StoryFinding[], status = 'story_review') {
       hook: 'Molasses killed twenty one people.',
       title: 'The Wave That Was Not Water',
       tiktok_caption: 'Warm and brown. #history #boston #wtf',
+      music: {
+        genre: 'dark ambient',
+        search_terms: ['slow industrial drone', 'dread build no drums'],
+        note: 'hold the drone under the setup, release on the reveal',
+      },
       style_prefix: 'documentary evidence photograph, large-format sheet film, vertical 9:16 composition',
       beats: [beat],
     },
@@ -56,6 +61,7 @@ function videoWith(findings: StoryFinding[], status = 'story_review') {
     story_versions: [],
     source_url: null,
     source_material: null,
+    source_images: [],
     error: null,
     total_cost_usd: 0,
     created_at: '2026-09-02T00:00:00.000Z',
@@ -190,5 +196,67 @@ describe('render review', () => {
     renderPage();
     expect(await screen.findByRole('button', { name: /Approve story/ })).toBeInTheDocument();
     expect(screen.queryByTestId('render-review')).not.toBeInTheDocument();
+  });
+});
+
+describe('publish kit at story review', () => {
+  it('shows the caption and the music suggestion as soon as the story exists', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: videoWith([]) });
+    renderPage();
+    expect(await screen.findByText('Warm and brown. #history #boston #wtf')).toBeInTheDocument();
+    const music = screen.getByTestId('music-suggestion');
+    expect(music).toHaveTextContent('dark ambient');
+    expect(music).toHaveTextContent('slow industrial drone');
+    expect(music).toHaveTextContent('dread build no drums');
+    expect(music).toHaveTextContent('release on the reveal');
+  });
+
+  it('renders no music block for a story written before the field existed', async () => {
+    const video = videoWith([]);
+    const { music: _omit, ...story } = video.story;
+    vi.mocked(api.get).mockResolvedValue({ data: { ...video, story } });
+    renderPage();
+    expect(await screen.findByText('Warm and brown. #history #boston #wtf')).toBeInTheDocument();
+    expect(screen.queryByTestId('music-suggestion')).toBeNull();
+  });
+});
+
+describe('source photos', () => {
+  const photo = (i: number, description: string | null) => ({
+    url: `https://upload.wikimedia.org/wikipedia/commons/a/ab/Nyos${i}.jpg`,
+    page_url: 'https://en.wikipedia.org/wiki/Lake_Nyos_disaster',
+    file_path: `videos/7/00_sources/src0${i}.jpg`,
+    alt: i === 1 ? 'Lake Nyos after the eruption' : null,
+    context: null,
+    width: 1200,
+    height: 800,
+    sha256: String(i).repeat(64),
+    description,
+    analysis_model: description ? 'gpt-5.5' : null,
+  });
+
+  it('shows each photo with its description as the tooltip and names the analysing model', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: { ...videoWith([]), source_images: [photo(1, 'Grey still water, red laterite shore.'), photo(2, null)] },
+    });
+    renderPage();
+    const block = await screen.findByTestId('source-photos');
+    expect(block).toHaveTextContent('2 source photos from the page');
+    expect(block).toHaveTextContent('1 described by gpt-5.5');
+    expect(screen.getByTitle('Grey still water, red laterite shore.')).toHaveAttribute(
+      'href',
+      'https://upload.wikimedia.org/wikipedia/commons/a/ab/Nyos1.jpg',
+    );
+    expect(screen.getByAltText('Lake Nyos after the eruption')).toHaveAttribute(
+      'src',
+      expect.stringContaining('videos/7/00_sources/src01.jpg'),
+    );
+  });
+
+  it('renders nothing for a video generated from a topic', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: videoWith([]) });
+    renderPage();
+    await screen.findByText('Warm and brown. #history #boston #wtf');
+    expect(screen.queryByTestId('source-photos')).toBeNull();
   });
 });

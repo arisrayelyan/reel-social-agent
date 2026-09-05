@@ -10,7 +10,7 @@ import {
   type LlmStory,
   type Provider,
 } from '@reel-agent/shared';
-import { extractLinkedUrls, FirecrawlClient } from '../clients/firecrawl.js';
+import { extractLinkedUrls, extractSourceImages, FirecrawlClient } from '../clients/firecrawl.js';
 import {
   buildRepairInstruction,
   generateJsonWithRetry,
@@ -30,6 +30,7 @@ import {
   topicsSystem,
 } from '../llm/prompts.js';
 import { postProcessStory, type StoryValidation } from '../utils/storyPost.js';
+import { buildPhotoNotes, describeSourceImages, downloadSourceImages } from '../utils/sourceImages.js';
 import {
   addVideoCost,
   createDraftVideo,
@@ -41,6 +42,7 @@ import {
   updateVideoStory,
 } from '../database/queries/videos.js';
 import { insertGenerationRun } from '../database/queries/generationRuns.js';
+import { linkCandidateVideo } from '../database/queries/storyCandidates.js';
 import { publishEvent } from '../pipeline/events.js';
 
 /** Hard reject when an explicit topic nearly duplicates an existing video. */
@@ -258,10 +260,13 @@ function runStoryGeneration(
 }
 
 /**
- * Background half of "generate from URL": scrape the page (plus the pages it
- * mentions), dedupe on the derived topic, persist the source material, then
- * hand off to the normal script generation. Any failure marks the video
- * failed at the script step — same UX as an LLM failure.
+ * Background half of "generate from URL": scrape the page's main content (plus
+ * linked pages only when FIRECRAWL_MAX_LINKED_PAGES > 0), download the photos
+ * the article shows and have the story provider describe them, dedupe on the
+ * derived topic, persist source material + photo notes, then hand off to the
+ * normal script generation. Photo steps degrade to "no photos" on any error;
+ * any other failure marks the video failed at the script step — same UX as an
+ * LLM failure.
  */
 function runUrlStoryGeneration(
   app: FastifyInstance,
@@ -298,12 +303,67 @@ function runUrlStoryGeneration(
       });
       await addVideoCost(app, opts.videoId, scrapeCost);
 
-      const sourceMaterial = [
-        `# ${main.title}\nSource: ${main.url}\n\n${main.markdown.slice(0, MAIN_PAGE_MAX_CHARS)}`,
-        ...linked.map(
-          (p) => `\n\n---\n\n## Related: ${p.title}\nSource: ${p.url}\n\n${p.markdown.slice(0, LINKED_PAGE_MAX_CHARS)}`,
-        ),
-      ].join('');
+      // Photos the article itself shows → described by the story provider →
+      // PHOTO NOTES in the source material. Never a reason to fail the video.
+      let sourceImages = await downloadSourceImages(
+        app,
+        opts.videoId,
+        main.url,
+        extractSourceImages(main.markdown, main.url, app.config.firecrawlMaxSourceImages),
+      );
+      if (sourceImages.length > 0 && app.config.sourceImageAnalysis) {
+        await publishEvent(app, {
+          video_id: opts.videoId,
+          step: 'script',
+          status: 'progress',
+          message: `Describing ${sourceImages.length} source photo${sourceImages.length === 1 ? '' : 's'}`,
+        });
+        const analysisStartedAt = Date.now();
+        try {
+          const { images, run } = await describeSourceImages(app, opts.provider, sourceImages);
+          sourceImages = images;
+          if (run) {
+            await insertGenerationRun(app, {
+              videoId: opts.videoId,
+              step: 'research',
+              provider: opts.providerName,
+              model: run.model,
+              prompt: `source photos: ${images.map((img) => img.url).join(' ')}`,
+              output: {
+                images: images.map(({ url, description }) => ({ url, description })),
+              },
+              inputTokens: run.inputTokens,
+              outputTokens: run.outputTokens,
+              costUsd: run.costUsd,
+              durationMs: Date.now() - analysisStartedAt,
+            });
+            await addVideoCost(app, opts.videoId, run.costUsd);
+          } else {
+            await publishEvent(app, {
+              video_id: opts.videoId,
+              step: 'script',
+              status: 'progress',
+              message: `Photo analysis skipped — ${opts.providerName} cannot read images`,
+            });
+          }
+        } catch (err) {
+          app.log.warn({ err, videoId: opts.videoId }, 'source photo analysis failed — continuing from text');
+          await publishEvent(app, {
+            video_id: opts.videoId,
+            step: 'script',
+            status: 'progress',
+            message: 'Photo analysis failed — writing from the text alone',
+          });
+        }
+      }
+
+      const sourceMaterial =
+        [
+          `# ${main.title}\nSource: ${main.url}\n\n${main.markdown.slice(0, MAIN_PAGE_MAX_CHARS)}`,
+          ...linked.map(
+            (p) => `\n\n---\n\n## Related: ${p.title}\nSource: ${p.url}\n\n${p.markdown.slice(0, LINKED_PAGE_MAX_CHARS)}`,
+          ),
+        ].join('') + buildPhotoNotes(sourceImages);
 
       // dedupe on the page title now that we know it (best-effort, like the topic path)
       let embedding: number[] | null = null;
@@ -325,6 +385,7 @@ function runUrlStoryGeneration(
         topic: main.title,
         embedding,
         sourceMaterial,
+        sourceImages,
       });
       runStoryGeneration(app, {
         videoId: opts.videoId,
@@ -349,6 +410,15 @@ function runUrlStoryGeneration(
   })();
 }
 
+/** Research → video link; a stale candidate id must never fail a generation. */
+async function linkCandidate(app: FastifyInstance, candidateId: number, videoId: number): Promise<void> {
+  try {
+    await linkCandidateVideo(app, candidateId, videoId);
+  } catch (err) {
+    app.log.warn({ err, candidateId, videoId }, 'could not link research candidate to video');
+  }
+}
+
 export async function generateRouter(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -360,7 +430,7 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
     '/generate/story',
     { schema: { body: GenerateStoryBodySchema } },
     async (request, reply) => {
-      const { topic, provider: providerName, model, change_request, video_id } = request.body;
+      const { topic, provider: providerName, model, change_request, video_id, candidate_id } = request.body;
       const provider = getProvider(app.config, providerName, model);
 
       // — regeneration of an existing draft —
@@ -405,6 +475,7 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
       }
 
       const video = await createDraftVideo(app, { topic, embedding });
+      if (candidate_id) await linkCandidate(app, candidate_id, video.id);
       runStoryGeneration(app, {
         videoId: video.id,
         topic,
@@ -427,7 +498,7 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
     '/generate/from-url',
     { schema: { body: GenerateFromUrlBodySchema } },
     async (request, reply) => {
-      const { url, provider: providerName, model } = request.body;
+      const { url, provider: providerName, model, candidate_id } = request.body;
       const provider = getProvider(app.config, providerName, model);
       if (!app.config.firecrawlApiKey) {
         return reply.code(400).send({
@@ -436,6 +507,7 @@ export async function generateRouter(app: FastifyInstance): Promise<void> {
       }
 
       const video = await createDraftVideo(app, { topic: url, embedding: null, sourceUrl: url });
+      if (candidate_id) await linkCandidate(app, candidate_id, video.id);
       runUrlStoryGeneration(app, { videoId: video.id, url, providerName, provider });
       return reply.code(202).send({ video });
     },

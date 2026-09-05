@@ -62,23 +62,26 @@ const HARD_RULES: Array<{ name: string; re: RegExp }> = [
   { name: 'weak to strong pairs', re: /weak: `/ },
   { name: 'motion only', re: /[Dd]escribe motion ONLY/ },
   { name: 'motion under 30 words', re: /[Uu]nder 30 words/ },
-  { name: 'one camera cue maximum', re: /[Aa]t most ONE camera cue/ },
-  { name: 'explicit camera on non-locked beats', re: /flat slow zoom/ },
+  { name: 'one camera cue maximum', re: /at most ONE cue per beat/ },
   { name: 'plausible physics', re: /physically plausible/ },
-  { name: 'verb once per video', re: /at most once across the whole video/ },
-  { name: 'exactly 2 camera_locked', re: /exactly 2 quieter beats/ },
-  { name: 'never lock hook, turn or reveal', re: /never the hook, the turn or the reveal/ },
+  { name: 'verb once in neighbouring beats', re: /at most once in any two neighbouring beats/ },
   { name: 'the hook moves most', re: /THE HOOK MOVES MOST/ },
-  { name: 'five subject-motion beats', re: /At least 5 beats must have SUBJECT motion/ },
-  { name: 'event-scale motion welcome', re: /Event-scale motion is welcome/ },
+  // the emphasis inverted 4 Sep 2026: action on EVERY beat, camera optional
+  { name: 'every beat moves something', re: /EVERY BEAT MOVES SOMETHING IN THE FRAME/ },
+  { name: 'camera is optional and secondary', re: /camera is OPTIONAL and always secondary/ },
+  { name: 'a person doing something', re: /A PERSON DOING SOMETHING/ },
+  { name: 'do not ask for a static frame', re: /Do not ask for a static or tripod-locked frame/ },
   { name: 'at least 5 shot types', re: /at least 5 DIFFERENT shot types/i },
   { name: 'imperfection detail', re: /wear or imperfection detail/ },
   { name: 'light source with direction', re: /motivated light source WITH a direction/ },
   { name: 'off-centre composition', re: /off-centre/ },
   { name: 'no style words in image prompts', re: /No style words/ },
-  { name: 'people allowed', re: /people are allowed and wanted/ },
+  { name: 'a person in almost every beat', re: /put a person in almost every beat/ },
+  { name: 'faces are wanted', re: /FACES ARE WANTED, lit and visible/ },
+  { name: 'a face is not the lens', re: /not the same as facing the lens/ },
+  { name: 'five-part person spec', re: /FIVE concrete parts/ },
   { name: 'never corpses or injuries', re: /Never corpses, the dying, injuries/ },
-  { name: 'never a real named face', re: /Never render the face of a real named individual/ },
+  { name: 'never a real named face', re: /Never the face of a real named individual/ },
   { name: 'money shots', re: /MONEY SHOTS/ },
   { name: 'hook is never paperwork', re: /The hook is never a document/ },
   { name: 'paperwork cap', re: /at most ONE beat per video may show paper/ },
@@ -91,6 +94,7 @@ const HARD_RULES: Array<{ name: string; re: RegExp }> = [
   { name: 'overlay hook <= 8 words', re: /maximum 8 words/ },
   { name: 'evidence stamp', re: /evidence_stamp/ },
   { name: 'caption fold', re: /under 100 characters/ },
+  { name: 'music genre from the list', re: /music — genre EXACTLY one of/ },
   { name: 'derived fields omitted', re: /Do NOT output index, word_count or duration_seconds/ },
   // render caps — a cap the model can't know about is a paid schema retry
   // (observed 2 Sep 2026: a 59-char evidence_stamp burned two codex calls)
@@ -107,6 +111,7 @@ const SYSTEM_CONTRACT: Array<{ name: string; re: RegExp }> = [
   { name: 'camera_locked on every beat', re: /"camera_locked" must be present on EVERY beat/ },
   { name: 'no markdown fences', re: /no markdown fences/ },
   { name: 'no extra keys', re: /Do not add any keys beyond these/ },
+  { name: 'music key in skeleton', re: /"music": \{/ },
 ];
 
 describe('story prompt still states every hard rule', () => {
@@ -246,6 +251,26 @@ describe('system prompts', () => {
     expect(system).toContain('One Minute WTF');
     expect(system).toMatch(/visual record of the event/);
     expect(system).toMatch(/\[sigh\]/);
+  });
+
+  it('the research prompts state the rubric, the source rule and the hard rejects', () => {
+    const user = loadPrompt(promptsDir, 'research.user.md');
+    const system = loadPrompt(promptsDir, 'research.system.md');
+    for (const re of [
+      /SCORING AXES/,
+      /\{\{rubric_block\}\}/,
+      /source_url — ONE primary article or source/,
+      /HARD REJECTS/,
+      /living public figure/,
+      /children in danger/,
+      /recent or ongoing crisis event/,
+      /only evidence is paperwork/,
+      /\{\{catalogue_block\}\}\{\{feedback_block\}\}/,
+    ]) {
+      expect(user).toMatch(re);
+    }
+    expect(system).toMatch(/inventing a URL is worse than leaving a candidate out/);
+    expect(system).toMatch(/single JSON object/);
   });
 
   it('the topics system prompt scores for audience relevance', () => {

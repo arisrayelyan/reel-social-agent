@@ -67,6 +67,8 @@ export class FalClient {
   async submitImageToVideo(params: {
     imageUrl: string;
     motionPrompt: string;
+    /** Negatives, sent in their own field where the endpoint has one. */
+    negativePrompt?: string;
     durationSeconds: number;
     model?: string;
     resolution?: string;
@@ -75,26 +77,40 @@ export class FalClient {
   }): Promise<ClipSubmission> {
     const model = params.model ?? this.config.falVideoModel;
     const caps = capsFor(model);
-    // fal durations are integer seconds with a floor — request ceil+1 and trim in merge
+    // fal durations are whole seconds with a per-family floor; the request is
+    // rounded UP so the clip covers the shots that draw on it, and merge trims
     const requestedSeconds = Math.max(
-      5,
-      Math.min(caps.maxDurationSeconds, Math.ceil(params.durationSeconds) + 1),
+      caps.minDurationSeconds,
+      Math.min(caps.maxDurationSeconds, Math.ceil(params.durationSeconds)),
     );
     const resolution = params.resolution ?? this.config.falVideoResolution;
-    // a field the endpoint does not declare is a 422, so send these only where
-    // scripts/fal-schema.ts has confirmed they exist
+    // a field the endpoint does not declare is a 422, and a field it declares
+    // under a different NAME is also a 422 — every name below comes from the
+    // caps table, which is generated from the live openapi document
     const seed = caps.supportsSeed ? (params.seed ?? null) : null;
 
     const input: Record<string, unknown> = {
       prompt: params.motionPrompt,
-      image_url: params.imageUrl,
-      duration: requestedSeconds,
-      resolution,
-      // required by the endpoint, and it rewrites the prompt either way; sent
+      [caps.imageField]: params.imageUrl,
+      duration: caps.durationType === 'string' ? String(requestedSeconds) : requestedSeconds,
+      ...(caps.supportsResolution ? { resolution } : {}),
+      // required by h3-max, and it rewrites the prompt either way; sent
       // explicitly so the choice shows up in the recorded request
-      prompt_expansion_mode: this.config.falPromptExpansionMode,
+      ...(caps.rewritesPrompt
+        ? { prompt_expansion_mode: this.config.falPromptExpansionMode }
+        : {}),
+      // where the endpoint has a real negative field, the negatives belong
+      // there rather than eating into the prompt's ~30-word budget
+      ...(caps.hasNegativePrompt && params.negativePrompt
+        ? { negative_prompt: params.negativePrompt }
+        : {}),
+      // Kling and Seedance generate audio by DEFAULT; merge strips clip audio,
+      // and on Kling that default is a 50% surcharge for something discarded
+      ...(caps.audioField ? { [caps.audioField]: false } : {}),
       ...(seed === null ? {} : { seed }),
-      ...(params.endImageUrl && caps.supportsEndImage ? { end_image_url: params.endImageUrl } : {}),
+      ...(params.endImageUrl && caps.supportsEndImage
+        ? { [caps.endImageField]: params.endImageUrl }
+        : {}),
     };
 
     const { request_id } = await fal.queue.submit(model, { input });
@@ -104,7 +120,7 @@ export class FalClient {
       requestedSeconds,
       resolution,
       seed,
-      input: { ...input, image_url: redactImageUrl(params.imageUrl) },
+      input: { ...input, [caps.imageField]: redactImageUrl(params.imageUrl) },
     };
   }
 

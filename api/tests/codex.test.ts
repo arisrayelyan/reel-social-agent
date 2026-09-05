@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCodexJsonl } from '../src/llm/codex.js';
+import { buildCodexArgs, parseCodexJsonl } from '../src/llm/codex.js';
 
 describe('parseCodexJsonl', () => {
   it('parses current item.completed / usage event shapes', () => {
@@ -47,5 +47,36 @@ describe('parseCodexJsonl', () => {
       '{"type":"item.completed","item":{"type":"agent_message","text":"second"}}',
     ].join('\n');
     expect(parseCodexJsonl(stdout).text).toBe('second');
+  });
+});
+
+describe('buildCodexArgs', () => {
+  it('sends a bare model with -m only, leaving effort to the CLI default', () => {
+    const args = buildCodexArgs('gpt-5.4-mini', [], 'p');
+    expect(args).toEqual(expect.arrayContaining(['--model', 'gpt-5.4-mini']));
+    expect(args).not.toContain('-c');
+    expect(args.at(-1)).toBe('p');
+  });
+
+  it('splits <model>@<effort> into -m and a model_reasoning_effort override', () => {
+    const args = buildCodexArgs('gpt-6-astra@high', [], 'p');
+    expect(args).toEqual(expect.arrayContaining(['--model', 'gpt-6-astra', '-c', 'model_reasoning_effort="high"']));
+    expect(args).not.toContain('gpt-6-astra@high');
+  });
+
+  it('keeps an unknown @suffix as part of the model name', () => {
+    const args = buildCodexArgs('gpt-7@preview', [], 'p');
+    expect(args).toEqual(expect.arrayContaining(['--model', 'gpt-7@preview']));
+    expect(args).not.toContain('-c');
+  });
+
+  it('sends no -m at all when no model is configured', () => {
+    expect(buildCodexArgs('', [], 'p')).not.toContain('--model');
+  });
+
+  it('places every image -i before the prompt', () => {
+    const args = buildCodexArgs('gpt-5.5@medium', ['/a.jpg', '/b.png'], 'prompt');
+    expect(args).toEqual(expect.arrayContaining(['-i', '/a.jpg', '-i', '/b.png']));
+    expect(args.indexOf('-i')).toBeLessThan(args.indexOf('prompt'));
   });
 });

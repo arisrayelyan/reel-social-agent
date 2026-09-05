@@ -3,7 +3,9 @@ import { mkdir } from 'node:fs/promises';
 
 /**
  * Storage layout per video (pipeline-learnings §10):
- *   storage/videos/<id>/01_images/  02_clips/  03_audio/  04_export/
+ *   storage/videos/<id>/00_sources/  01_images/  02_clips/  03_audio/  04_export/
+ * 00_sources holds photographs downloaded from the source article (generate-
+ * from-URL) — inputs to the story prompt, never render assets.
  * Filenames are zero-padded so s10 sorts after s09.
  */
 export function videoDir(storageDir: string, videoId: number): string {
@@ -13,7 +15,7 @@ export function videoDir(storageDir: string, videoId: number): string {
 export function stageDir(
   storageDir: string,
   videoId: number,
-  stage: '01_images' | '02_clips' | '03_audio' | '04_export',
+  stage: '00_sources' | '01_images' | '02_clips' | '03_audio' | '04_export',
 ): string {
   return path.join(videoDir(storageDir, videoId), stage);
 }

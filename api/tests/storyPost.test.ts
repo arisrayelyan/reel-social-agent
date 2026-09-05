@@ -13,6 +13,7 @@ import {
   buildImagePrompt,
   buildMotionPrompt,
   countWords,
+  deriveMusic,
   deriveOverlayHook,
   durationForWords,
   postProcessStory,
@@ -68,9 +69,10 @@ describe('LlmStorySchema', () => {
     const story = storyFixture();
     const raw = {
       ...story,
-      beats: story.beats.map(({ camera_locked, ...rest }, i) =>
-        // models write camera_locked only where it's true — omit it elsewhere
-        camera_locked && i >= 4 ? { ...rest, camera_locked } : rest,
+      // models write camera_locked only where it is true — omit it elsewhere.
+      // Nothing forces it any more, so the fixture has none: set one here.
+      beats: story.beats.map(({ camera_locked: _drop, ...rest }, i) =>
+        i === 4 ? { ...rest, camera_locked: true } : rest,
       ),
     };
     const parsed = LlmStorySchema.parse(raw);
@@ -100,22 +102,6 @@ describe('postProcessStory normalizers', () => {
     expect(findings.some((f) => f.rule === 'exhibit.shortened')).toBe(true);
   });
 
-  it('prefers beats without camera moves when forcing locked cameras', () => {
-    const raw = storyFixture();
-    // no beat locked; last beat asks for a camera move, earlier ones do not
-    for (const b of raw.beats) b.camera_locked = false;
-    raw.beats.forEach((b, i) => {
-      b.motion_prompt = i >= 4 ? 'camera pushes in as steam vents from the crack' : 'steam vents from the crack';
-    });
-    const { story } = postProcessStory(raw);
-    const locked = story.beats.filter((b) => b.camera_locked).map((b) => b.index);
-    // beats 1-2 are clean candidates: 0 is the hook and 3 the turn, which are
-    // never forced static (the cover and the money shot); 4-5 ask for moves
-    expect(locked).toEqual([1, 2]);
-    expect(story.beats[3]!.camera_locked).toBe(false);
-    expect(story.beats[4]!.camera_locked).toBe(false);
-    expect(story.beats[5]!.camera_locked).toBe(false);
-  });
 });
 
 describe('postProcessStory', () => {
@@ -143,13 +129,6 @@ describe('postProcessStory', () => {
     expect(warnings.some((w) => w.includes('duration'))).toBe(true);
   });
 
-  it('forces locked-camera beats when the LLM provides fewer than 2', () => {
-    const story = storyFixture();
-    story.beats.forEach((b) => (b.camera_locked = false));
-    const { story: processed, warnings } = postProcessStory(story);
-    expect(processed.beats.filter((b) => b.camera_locked).length).toBeGreaterThanOrEqual(2);
-    expect(warnings.some((w) => w.includes('locked-camera'))).toBe(true);
-  });
 
   it('warns when narration contains digits (TTS needs words)', () => {
     const story = storyFixture();
@@ -170,11 +149,6 @@ describe('prompt builders', () => {
     expect(prompt).toBe(`slow push-in. ${MOTION_NEGATIVES}`);
   });
 
-  it('adds the tripod line for locked-camera beats', () => {
-    const prompt = buildMotionPrompt('mist drifts left.', true);
-    expect(prompt.endsWith(MOTION_LOCKED_CAMERA)).toBe(true);
-    expect(prompt).toContain(MOTION_NEGATIVES);
-  });
 });
 
 describe('deriveOverlayHook', () => {
@@ -232,5 +206,47 @@ describe('findings alongside the legacy warnings array', () => {
 
   it('never throws, however broken the story is', () => {
     expect(() => postProcessStory(sloppyStoryFixture())).not.toThrow();
+  });
+});
+
+describe('music suggestion', () => {
+  it('keeps the model\'s music and emits no music finding', () => {
+    const { story, findings } = postProcessStory(storyFixture());
+    expect(story.music).toEqual({ genre: 'dark ambient', search_terms: ['dark ambient drone', 'low tension pad'] });
+    expect(findings.find((f) => f.rule === 'music.derived')).toBeUndefined();
+  });
+
+  it('derives a fallback with a music.derived warning when the model omits it', () => {
+    const { music: _omit, ...raw } = storyFixture();
+    const { story, findings } = postProcessStory(raw);
+    expect(story.music?.genre).toBe('dark ambient'); // "killed a valley" → disaster family
+    const finding = findings.find((f) => f.rule === 'music.derived');
+    expect(finding).toMatchObject({ severity: 'warning', field: 'music', beat_index: null, evidence: 'dark ambient' });
+  });
+
+  it('LlmStorySchema collapses a bad genre to undefined instead of failing the story', () => {
+    const parsed = LlmStorySchema.parse({
+      ...storyFixture(),
+      music: { genre: 'Trap Metal', search_terms: ['x'] },
+    });
+    expect(parsed.music).toBeUndefined();
+    // …and lowercases/trims a valid one
+    expect(
+      LlmStorySchema.parse({ ...storyFixture(), music: { genre: '  Horror ', search_terms: ['eerie'] } }).music,
+    ).toEqual({ genre: 'horror', search_terms: ['eerie'] });
+  });
+
+  it('deriveMusic picks by keyword family, defaulting to tension', () => {
+    const beats = [{ narration: 'plain words' }] as never;
+    expect(deriveMusic({ topic: 'The haunted lighthouse keeper', hook: 'x', beats }).genre).toBe('horror');
+    expect(deriveMusic({ topic: 'The great train robbery', hook: 'x', beats }).genre).toBe('suspense thriller');
+    expect(deriveMusic({ topic: 'Miners rescued after 69 days', hook: 'x', beats }).genre).toBe('cinematic orchestral');
+    expect(deriveMusic({ topic: 'A town buried by a lahar', hook: 'x', beats }).genre).toBe('dark ambient');
+    expect(deriveMusic({ topic: 'The island that moved', hook: 'x', beats }).genre).toBe('tension');
+  });
+
+  it('StorySchema accepts a story without music (historical rows)', () => {
+    const { music: _omit, ...raw } = storyFixture();
+    expect(StorySchema.parse(raw).music).toBeUndefined();
   });
 });

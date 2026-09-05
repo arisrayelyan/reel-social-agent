@@ -24,13 +24,16 @@ export const FINDING_FIELDS = [
   'motion_prompt',
   'tiktok_caption',
   'style_prefix',
+  'music',
 ] as const;
 export type FindingField = (typeof FINDING_FIELDS)[number];
 
 /**
- * Emitted by postProcessStory, not by the rule registry: only the normalizer
- * knows the pre-forcing camera_locked count, because the validator sees the
- * story after the fix-up has already run.
+ * RETIRED 4 Sep 2026 — nothing emits this any more. postProcessStory used to
+ * force two beats camera_locked when the model wrote fewer; that appended
+ * MOTION_LOCKED_CAMERA, which on a prompt-expanding endpoint dominated the
+ * rewrite and returned a static clip. Kept exported because historical
+ * `videos.story_findings` rows carry the string and `rule` is z.string().
  */
 export const RULE_CAMERA_LOCKED_FORCED = 'story.camera_locked_forced';
 
@@ -41,6 +44,8 @@ export const RULE_CAMERA_LOCKED_FORCED = 'story.camera_locked_forced';
  */
 export const RULE_STAMP_SHORTENED = 'stamp.shortened';
 export const RULE_EXHIBIT_TAG_SHORTENED = 'exhibit.shortened';
+/** Model omitted (or mangled) `music`; postProcessStory picked a keyword fallback. */
+export const RULE_MUSIC_DERIVED = 'music.derived';
 
 /** Render caps shared by the LLM prompt, the normalizer and the overlay. */
 export const EVIDENCE_STAMP_MAX_CHARS = 48;

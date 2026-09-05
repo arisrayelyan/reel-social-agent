@@ -1,21 +1,19 @@
 import {
   BEAT_GAP_SECONDS,
-  CAMERA_VERBS,
   END_TAIL_SECONDS,
   EVIDENCE_STAMP_MAX_CHARS,
   EXHIBIT_TAG_MAX_CHARS,
   IMAGE_PROMPT_SUFFIX,
-  MOTION_LOCKED_CAMERA,
   MOTION_NEGATIVES,
   OVERLAY_HOOK_MAX_CHARS,
   OVERLAY_HOOK_MAX_WORDS,
-  RULE_CAMERA_LOCKED_FORCED,
   RULE_EXHIBIT_TAG_SHORTENED,
+  RULE_MUSIC_DERIVED,
   RULE_STAMP_SHORTENED,
   WORDS_PER_MINUTE,
-  matchVerbKeys,
   sortFindings,
   type LlmStory,
+  type Music,
   type Story,
   type StoryFinding,
 } from '@reel-agent/shared';
@@ -62,6 +60,41 @@ export function deriveOverlayHook(hook: string): string {
     .slice(0, OVERLAY_HOOK_MAX_WORDS)
     .join(' ');
   return shortenToChars(capped, OVERLAY_HOOK_MAX_CHARS);
+}
+
+/**
+ * Keyword fallback for the post-time music suggestion, used only when the
+ * model omitted or mangled `music`. Coarse on purpose — it exists so an old
+ * story row or a sloppy output still gets a usable suggestion, and the
+ * `music.derived` warning tells the producer it was not the model's pick.
+ * First matching family wins; order is specificity.
+ */
+const MUSIC_FALLBACKS: Array<{ re: RegExp; music: Music }> = [
+  {
+    re: /\b(haunt|ghost|vanish|disappear|unexplained|curse|mystery|myster|possess|séance|seance|unsolved)/i,
+    music: { genre: 'horror', search_terms: ['eerie drone', 'horror ambience no drums', 'slow dread build'] },
+  },
+  {
+    re: /\b(heist|fraud|robber|steal|stole|forger|smuggl|con man|swindl|counterfeit|spy|espionage|assassin|murder)/i,
+    music: { genre: 'suspense thriller', search_terms: ['tense pulse', 'thriller underscore', 'ticking suspense'] },
+  },
+  {
+    re: /\b(rescue|surviv|escape|against the odds|saved|miracle|record|first ever|won|victory)/i,
+    music: { genre: 'cinematic orchestral', search_terms: ['cinematic build', 'orchestral swell', 'hopeful strings'] },
+  },
+  {
+    re: /\b(dead|died|death|kill|toxic|poison|disaster|eruption|erupt|collapse|flood|drown|plague|famine|crash|explode|explosion|wiped out|buried)/i,
+    music: { genre: 'dark ambient', search_terms: ['dark ambient drone', 'low tension pad', 'somber atmosphere'] },
+  },
+];
+const DEFAULT_MUSIC: Music = {
+  genre: 'tension',
+  search_terms: ['slow tension build', 'documentary underscore', 'suspense pad'],
+};
+
+export function deriveMusic(story: Pick<LlmStory, 'topic' | 'hook' | 'beats'>): Music {
+  const text = [story.topic, story.hook, ...story.beats.map((b) => b.narration)].join(' ');
+  return MUSIC_FALLBACKS.find((f) => f.re.test(text))?.music ?? DEFAULT_MUSIC;
 }
 
 /** Cuts on a word boundary so an on-screen cap never slices mid-word. */
@@ -115,36 +148,12 @@ export function postProcessStory(
     ).toFixed(2),
   );
 
-  // The locked-camera fix-up must happen HERE, not in a rule: only the
-  // normalizer knows the pre-forcing count, because the validator sees the
-  // story after the mutation has already run.
-  if (beats.filter((b) => b.camera_locked).length < 2) {
-    // Force quieter beats static rather than reject the story. Never the hook
-    // (the cover's first two seconds must move), the turn or the reveal (the
-    // money shots). Beats whose motion_prompt names no camera move go first:
-    // forcing a beat that asks for one trips motion.locked_has_camera_move
-    // (an error) and buys a paid craft retry for a story that is otherwise fine.
-    const NEVER_LOCK = new Set(['hook', 'turn', 'reveal']);
-    const lockable = (b: (typeof beats)[number]) => !NEVER_LOCK.has(b.role) && !b.camera_locked;
-    const hasMove = (b: (typeof beats)[number]) =>
-      matchVerbKeys(b.motion_prompt, CAMERA_VERBS).length > 0;
-    const candidates = [
-      ...beats.filter((b) => lockable(b) && !hasMove(b)).reverse(),
-      ...beats.filter((b) => lockable(b) && hasMove(b)).reverse(),
-    ];
-    for (const beat of candidates) {
-      if (beats.filter((b) => b.camera_locked).length >= 2) break;
-      beat.camera_locked = true;
-    }
-    findings.push({
-      rule: RULE_CAMERA_LOCKED_FORCED,
-      severity: 'warning',
-      field: 'story',
-      beat_index: null,
-      detail: 'Fewer than 2 locked-camera beats — forced static holds on late beats',
-      evidence: null,
-    });
-  }
+  // No locked-camera fix-up. Until 4 Sep 2026 this forced two beats static
+  // when the model wrote fewer, appending MOTION_LOCKED_CAMERA — the loudest
+  // sentence in a prompt h3-max then expands, which is how "Absolutely no
+  // camera movement, tripod locked" came back as "a perfectly static shot
+  // throughout". Stillness is now only ever the model's own choice, and
+  // story.camera_locked_excess warns on any of it.
 
   const overlay_hook = deriveOverlayHook(raw.overlay_hook ?? raw.hook);
   if (!raw.overlay_hook) {
@@ -182,7 +191,23 @@ export function postProcessStory(
     evidence_stamp = shortened;
   }
 
-  const story: Story = { ...raw, overlay_hook, evidence_stamp, beats };
+  // `music` is a post-time suggestion, never a render input, so a missing or
+  // mangled value (LlmMusicSchema collapses any failure to undefined) costs a
+  // keyword fallback and a warning — never a paid retry.
+  let music = raw.music;
+  if (!music) {
+    music = deriveMusic(raw);
+    findings.push({
+      rule: RULE_MUSIC_DERIVED,
+      severity: 'warning',
+      field: 'music',
+      beat_index: null,
+      detail: `No usable music suggestion from the model — picked "${music.genre}" from story keywords. Weaker than a pick made for the story's register.`,
+      evidence: music.genre,
+    });
+  }
+
+  const story: Story = { ...raw, overlay_hook, evidence_stamp, music, beats };
   findings.push(
     ...validateStory(story, {
       promptExamples: opts.promptExamples,
@@ -205,9 +230,21 @@ export function buildImagePrompt(stylePrefix: string, beatPrompt: string): strin
   return `${stylePrefix.trim()} ${beatPrompt.trim()}. ${IMAGE_PROMPT_SUFFIX}.`;
 }
 
-/** Full motion prompt: motion only + fixed negatives (+ tripod line when locked). */
-export function buildMotionPrompt(motionPrompt: string, cameraLocked: boolean): string {
-  const parts = [motionPrompt.trim().replace(/\.?$/, '.'), MOTION_NEGATIVES];
-  if (cameraLocked) parts.push(MOTION_LOCKED_CAMERA);
+/**
+ * Full motion prompt: motion only + fixed negatives (+ tripod line when locked).
+ *
+ * `inlineNegatives: false` leaves MOTION_NEGATIVES out, for endpoints that
+ * declare a real `negative_prompt` field — there they go in their own field as
+ * MOTION_NEGATIVES_KEYWORDS instead of spending the prompt's word budget.
+ *
+ * No tripod line any more: MOTION_LOCKED_CAMERA is gone, because on a model
+ * that expands prompts it dominated the rewrite and turned the clip static.
+ */
+export function buildMotionPrompt(
+  motionPrompt: string,
+  opts: { inlineNegatives?: boolean } = {},
+): string {
+  const parts = [motionPrompt.trim().replace(/\.?$/, '.')];
+  if (opts.inlineNegatives ?? true) parts.push(MOTION_NEGATIVES);
   return parts.join(' ');
 }

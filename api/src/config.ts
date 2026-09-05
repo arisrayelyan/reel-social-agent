@@ -1,8 +1,10 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_CURSOR_MODEL } from '@reel-agent/shared';
+import { DEFAULT_CODEX_MODEL, DEFAULT_CURSOR_MODEL } from '@reel-agent/shared';
 import { parseCostMap } from './clients/falModels.js';
+import { parseCodexPriceMap } from './llm/codexPricing.js';
 import { parseCursorPriceMap, type CursorPrice } from './llm/cursorPricing.js';
+import type { TokenPrice } from './llm/pricing.js';
 
 export interface AppConfig {
   port: number;
@@ -19,9 +21,10 @@ export interface AppConfig {
   claudeCliPath: string;
   claudeModel: string;
   codexCliPath: string;
+  /** Fallback `<model>` or `<model>@<effort>`; the pages override it per request. */
   codexModel: string;
-  codexInputCostPerMTok: number;
-  codexOutputCostPerMTok: number;
+  /** Model-id prefix → $/1M tokens, overriding the built-in table in llm/codexPricing.ts. */
+  codexPricePerMTok: Record<string, TokenPrice>;
   cursorCliPath: string;
   /** Fallback model; the Generate page overrides it per request. */
   cursorModel: string;
@@ -30,6 +33,8 @@ export interface AppConfig {
   geminiApiKey: string;
   geminiImageModel: string;
   geminiImageCostUsd: number;
+  /** '1K' | '2K' | '4K', or '' to send nothing. Ignored by 2.5-flash-image. */
+  geminiImageSize: string;
   falKey: string;
   falVideoModel: string;
   falVideoResolution: string;
@@ -46,6 +51,9 @@ export interface AppConfig {
    * 'balanced' keeps today's behaviour, now explicit and switchable.
    */
   falPromptExpansionMode: string;
+  /** Beats that may get a generated video clip; the rest cut from stills.
+   *  Infinity (env unset) = every beat, so the reel stays generated video. */
+  falMaxClipsPerVideo: number;
   /**
    * Generate a deterministic end frame for the kicker (one extra Gemini edit)
    * and drive the kicker clip with first+last frame, so the reel's final frame
@@ -57,8 +65,13 @@ export interface AppConfig {
   /** Per-model $/s so the dashboard stays honest across tiers. */
   falCostPerSecondUsdMap: Record<string, number>;
   firecrawlApiKey: string;
+  /** 0 = the given URL's main content only (default since 4 Sep 2026). */
   firecrawlMaxLinkedPages: number;
   firecrawlCostPerPageUsd: number;
+  /** Photos taken from the source page's main content and described for the story model. */
+  firecrawlMaxSourceImages: number;
+  /** Emergency off-switch for the vision pass over source photos. */
+  sourceImageAnalysis: boolean;
   ttsUrl: string;
   /**
    * Delivery pace sent with every /synthesize call and folded into the TTS
@@ -108,27 +121,36 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     claudeCliPath: env.CLAUDE_CLI_PATH ?? 'claude',
     claudeModel: env.CLAUDE_MODEL ?? 'opus',
     codexCliPath: env.CODEX_CLI_PATH ?? 'codex',
-    codexModel: env.CODEX_MODEL ?? 'gpt-5.6-luna',
-    codexInputCostPerMTok: Number(env.CODEX_INPUT_COST_PER_MTOK ?? 1.25),
-    codexOutputCostPerMTok: Number(env.CODEX_OUTPUT_COST_PER_MTOK ?? 10),
+    codexModel: env.CODEX_MODEL ?? DEFAULT_CODEX_MODEL,
+    codexPricePerMTok: parseCodexPriceMap(env.CODEX_PRICE_PER_MTOK_MAP),
     cursorCliPath: env.CURSOR_CLI_PATH ?? 'cursor-agent',
     cursorModel: env.CURSOR_MODEL ?? DEFAULT_CURSOR_MODEL,
     cursorPricePerMTok: parseCursorPriceMap(env.CURSOR_PRICE_PER_MTOK_MAP),
     geminiApiKey: env.GEMINI_API_KEY ?? '',
     geminiImageModel: env.GEMINI_IMAGE_MODEL ?? 'gemini-2.5-flash-image',
     geminiImageCostUsd: Number(env.GEMINI_IMAGE_COST_USD ?? 0.039),
+    geminiImageSize: env.GEMINI_IMAGE_SIZE ?? '',
     falKey: env.FAL_KEY ?? '',
     falVideoModel: env.FAL_VIDEO_MODEL ?? 'minimax/h3-max/image-to-video',
     falVideoResolution: env.FAL_VIDEO_RESOLUTION ?? '768P',
     falVideoModelDraft: env.FAL_VIDEO_MODEL_DRAFT ?? '',
     falVideoResolutionDraft: env.FAL_VIDEO_RESOLUTION_DRAFT ?? '480P',
     falPromptExpansionMode: env.FAL_PROMPT_EXPANSION_MODE ?? 'quality',
+    // unset = no cap: every beat gets a clip and the reel stays generated
+    // video throughout. A number caps it, and the uncapped beats cut from
+    // stills instead — 0 means stills only.
+    falMaxClipsPerVideo:
+      env.FAL_MAX_CLIPS_PER_VIDEO === undefined || env.FAL_MAX_CLIPS_PER_VIDEO === ''
+        ? Number.POSITIVE_INFINITY
+        : Number(env.FAL_MAX_CLIPS_PER_VIDEO),
     loopableKicker: (env.LOOPABLE_KICKER ?? 'true') !== 'false',
-    falCostPerSecondUsd: Number(env.FAL_COST_PER_SECOND_USD ?? 0.04),
+    falCostPerSecondUsd: Number(env.FAL_COST_PER_SECOND_USD ?? 0.08),
     falCostPerSecondUsdMap: parseCostMap(env.FAL_COST_PER_SECOND_USD_MAP),
     firecrawlApiKey: env.FIRECRAWL_API_KEY ?? '',
-    firecrawlMaxLinkedPages: Number(env.FIRECRAWL_MAX_LINKED_PAGES ?? 4),
+    firecrawlMaxLinkedPages: Number(env.FIRECRAWL_MAX_LINKED_PAGES ?? 0),
     firecrawlCostPerPageUsd: Number(env.FIRECRAWL_COST_PER_PAGE_USD ?? 0.005),
+    firecrawlMaxSourceImages: Number(env.FIRECRAWL_MAX_SOURCE_IMAGES ?? 4),
+    sourceImageAnalysis: (env.SOURCE_IMAGE_ANALYSIS ?? 'true') !== 'false',
     ttsUrl: env.TTS_URL ?? 'http://localhost:4042',
     ttsTargetWpm: Number(env.TTS_TARGET_WPM ?? 152),
     ttsSentenceGapSeconds: Number(env.TTS_SENTENCE_GAP_SECONDS ?? 0.35),

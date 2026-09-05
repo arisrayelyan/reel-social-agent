@@ -15,6 +15,14 @@ export const AssetSchema = z.object({
   video_id: z.number().int(),
   beat_index: z.number().int().nullable(),
   kind: AssetKindSchema,
+  /**
+   * Which shot slot inside a beat this asset fills. A beat's picture time is
+   * carried by several shots, and each needs its own frame — two crops of one
+   * still are a jump cut, not a cut. 0 is the beat's canonical frame (the one
+   * the fal clip animates); every other kind only ever uses 0.
+   */
+  variant: z.number().int(),
+  /** Alternative attempts at the same slot. Never overwritten. */
   take: z.number().int(),
   selected: z.boolean(),
   content_hash: z.string(),

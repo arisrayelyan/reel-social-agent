@@ -155,7 +155,8 @@ export const CAMERA_VERBS: readonly PromptVerb[] = [
 ] as const;
 
 /**
- * In-frame subject motion. >= 5 beats need one; at most two per beat.
+ * In-frame subject motion. EVERY beat needs one (motion.no_subject_motion);
+ * at most two per beat.
  * The second block is the event vocabulary added 2 Sep 2026: the first list
  * was all whisper-scale (a crumb drops, a rope sways), and a WTF channel whose
  * biggest motion is a curling wisp reads as a slideshow.
@@ -189,13 +190,20 @@ export const SUBJECT_MOTION_VERBS: readonly PromptVerb[] = [
   { key: 'running', purpose: 'people reacting', aliases: ['people run', 'runs from', 'run toward', 'run from', 'scramble', 'scrambles', 'flee', 'flees', 'hurry', 'hurries'] },
   { key: 'scattering', purpose: 'crowd or debris dispersing', aliases: ['scatters', 'scattering', 'scatter', 'disperse', 'flung', 'thrown across'] },
   { key: 'rolling', purpose: 'a mass advancing', aliases: ['rolls down', 'rolls across', 'rolls over', 'rolls in', 'tumbles', 'churns'] },
-] as const;
-
-/** Terms that read as "camera" even without a move verb (locked beats say these). */
-export const CAMERA_BEHAVIOR_TERMS: readonly string[] = [
-  'camera', 'static', 'locked', 'tripod', 'fixed frame', 'frame holds', 'camera holds',
-  // bare cinematography nouns — "slow pan across", "orbit around", "lens racks"
-  'lens', 'pan', 'orbit', 'dolly', 'crane', 'tilt', 'zoom', 'tracking',
+  // person-scale action, added 4 Sep 2026. Without these the mandatory
+  // per-beat action rule is unsatisfiable on any beat built around a human:
+  // of the 27 keys above, only `running` and `scattering` covered people, so
+  // "hauling the valve handle over" counted as no motion at all.
+  { key: 'hauling', purpose: 'a person working against weight', aliases: ['hauls', 'hauling', 'drags', 'dragging', 'heaves', 'heaving', 'winches', 'levers'] },
+  { key: 'bracing', purpose: 'a body taking the force', aliases: ['braces', 'bracing', 'leans into', 'plants his', 'plants her', 'digs in', 'holds against'] },
+  { key: 'shielding', purpose: 'reaction to heat, light or debris', aliases: ['shields', 'shielding', 'covers his face', 'covers her face', 'raises an arm', 'turns away from', 'flinches'] },
+  { key: 'reaching', purpose: 'a person trying to act', aliases: ['reaches for', 'reaching for', 'stretches toward', 'grabs at', 'gropes for'] },
+  { key: 'kneeling', purpose: 'inspection at ground level', aliases: ['kneels', 'kneeling', 'crouches down', 'squats beside', 'stoops over'] },
+  { key: 'striking', purpose: 'manual force applied', aliases: ['hammers at', 'strikes', 'striking', 'swings at', 'drives the', 'chisels'] },
+  { key: 'pointing', purpose: 'a person directing attention', aliases: ['points at', 'pointing toward', 'gestures at', 'signals to', 'waves off'] },
+  { key: 'carrying', purpose: 'evacuation, salvage', aliases: ['carries', 'carrying', 'shoulders the', 'lugs', 'bears away'] },
+  { key: 'climbing_person', purpose: 'a person gaining height', aliases: ['climbs the', 'climbing the', 'hauls himself', 'hauls herself', 'scales the'] },
+  { key: 'recoiling', purpose: 'involuntary retreat', aliases: ['recoils', 'recoiling', 'steps back', 'stumbles back', 'jerks back', 'pulls away from'] },
 ] as const;
 
 /**
@@ -293,6 +301,26 @@ export const GRAPHIC_CONTENT_TERMS: readonly string[] = [
   'drowned', 'victim', 'victims', 'casualty', 'casualties', 'remains', 'skeleton', 'skull',
 ] as const;
 
+/**
+ * Phrases where a GRAPHIC_CONTENT_TERM is material rather than bodily.
+ *
+ * The Opus 5 eval (3 Sep 2026) caught "rust bleeding down the fence post"
+ * erroring on three of five stories. At ERROR severity that bought a second
+ * paid provider call each time — for exactly the concrete wear detail
+ * `image.imperfection` asks for. Same class of bug as bare `grain` in
+ * STYLE_NOUNS below.
+ *
+ * Stripped before matching rather than removed from the term list, because
+ * this rule protects the account from a policy strike: a false negative on
+ * "a bleeding man" costs far more than a false positive on rust.
+ */
+export const GRAPHIC_CONTENT_EXCLUSIONS: readonly string[] = [
+  'rust bleeding', 'dye bleeding', 'colour bleeding', 'color bleeding',
+  'paint bleeding', 'ink bleeding', 'tannin bleeding', 'sap bleeding',
+  'oil bleeding', 'creosote bleeding', 'damp bleeding', 'moisture bleeding',
+  'verdigris bleeding', 'stain bleeding',
+] as const;
+
 /** Words that mean a human figure is in the frame — image.human_presence wants at least one beat. */
 export const PERSON_TERMS: readonly string[] = [
   'person', 'people', 'man', 'woman', 'men', 'women', 'child', 'children', 'boy', 'girl',
@@ -362,23 +390,30 @@ export interface CaptureMedium {
 
 /**
  * The capture medium follows the era of the EVENT, not the mood. A 2023 story
- * in Tri-X is a lie; the channel promise is truth (visual-style.md §6).
+ * on Autochrome is a lie; the channel promise is truth (visual-style.md §6).
+ *
+ * Every medium here is a COLOUR process (4 Sep 2026). The table used to hand
+ * pre-1965 stories silver gelatin, black-and-white sheet film and Tri-X, and
+ * the producer's verdict was that monochrome frames do not hold a viewer —
+ * they read as a photo montage. Period colour existed for every era the
+ * channel covers: hand-tinted prints before 1900, Autochrome from 1907, colour
+ * slide film from 1935. The era is still honest; only the palette changed.
  */
 export const CAPTURE_MEDIA: readonly CaptureMedium[] = [
   {
-    id: 'silver_gelatin', era: 'pre-1900', from: 0, to: 1899,
-    keywords: ['gelatin', 'silver gelatin plate'],
-    line: 'silver gelatin plate, warm sepia tone, tunnel vignette, soft optics',
+    id: 'hand_tinted', era: 'pre-1900', from: 0, to: 1899,
+    keywords: ['hand-tinted', 'hand tinted', 'albumen'],
+    line: 'hand-tinted albumen print, warm muted colour wash, soft optics, tunnel vignette',
   },
   {
-    id: 'sheet_film', era: '1900–1945', from: 1900, to: 1945,
-    keywords: ['sheet film', 'large-format black and white'],
-    line: 'large-format black and white sheet film, deep tonal range, hard flash shadow',
+    id: 'autochrome', era: '1900–1935', from: 1900, to: 1935,
+    keywords: ['autochrome'],
+    line: 'Autochrome colour plate, soft pointillist grain, muted pastel colour, warm cast',
   },
   {
-    id: 'tri_x', era: '1946–1965', from: 1946, to: 1965,
-    keywords: ['tri-x'],
-    line: 'Tri-X black and white film, high mid-tone contrast, gritty shadow grain',
+    id: 'ektachrome', era: '1936–1965', from: 1936, to: 1965,
+    keywords: ['ektachrome'],
+    line: 'early Ektachrome colour slide film, gentle saturation, cool shadows, warm highlights, fine grain',
   },
   {
     id: 'kodachrome', era: '1966–1979', from: 1966, to: 1979,
@@ -461,6 +496,18 @@ export function matchPhrases(text: string, phrases: readonly string[]): string[]
 }
 
 /** Distinct verb keys present in `text` (aliases collapse to their key). */
+/**
+ * Removes the given phrases before a lexicon match, so a term used in an
+ * unrelated sense does not trip the rule. See GRAPHIC_CONTENT_EXCLUSIONS.
+ */
+export function stripPhrases(text: string, phrases: readonly string[]): string {
+  let out = text;
+  for (const phrase of phrases) {
+    out = out.replace(new RegExp(`\\b${escapeRegExp(phrase)}\\b`, 'gi'), ' ');
+  }
+  return out;
+}
+
 export function matchVerbKeys(text: string, verbs: readonly PromptVerb[]): string[] {
   const keys: string[] = [];
   for (const verb of verbs) {

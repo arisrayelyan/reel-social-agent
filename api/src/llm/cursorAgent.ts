@@ -1,5 +1,7 @@
 import { execa } from 'execa';
-import { mkdir } from 'node:fs/promises';
+import { copyFile, mkdir, rm } from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { GenerateJsonOptions, LlmProvider, LlmResult } from './provider.js';
 import { parseWithSchema } from './provider.js';
 import {
@@ -55,34 +57,55 @@ export class CursorAgentProvider implements LlmProvider {
   ) {}
 
   async generateJson<T>(opts: GenerateJsonOptions<T>): Promise<LlmResult<T>> {
+    await mkdir(this.workDir, { recursive: true });
+    // Images: ask mode is read-only but reads workspace files, so each image
+    // is copied under the scratch dir and referenced by relative path (the
+    // CLI docs' own example is `agent -p "Analyze this image: ./shot.png"`).
+    const imageDir = opts.images?.length ? path.join(this.workDir, 'images', randomUUID()) : null;
+    let imageBlock = '';
+    if (imageDir) {
+      await mkdir(imageDir, { recursive: true });
+      const rel: string[] = [];
+      for (const [i, file] of (opts.images ?? []).entries()) {
+        const name = `img${String(i + 1).padStart(2, '0')}${path.extname(file) || '.jpg'}`;
+        await copyFile(file, path.join(imageDir, name));
+        rel.push(`${i + 1}. ./${path.relative(this.workDir, path.join(imageDir, name))}`);
+      }
+      imageBlock = `\n\nATTACHED IMAGES (open and look at each file before answering):\n${rel.join('\n')}`;
+    }
     // `--system-prompt <file>` exists but is gated to "Anysphere/OpenAI team
     // only", so system and user are concatenated as they are for claude/codex.
-    const prompt = `${opts.system}\n\n${opts.prompt}`;
-    await mkdir(this.workDir, { recursive: true });
-    const { stdout } = await execa(
-      this.cliPath,
-      [
-        '-p', prompt,
-        '--output-format', 'json',
-        // read-only Q&A: no edits, no shell, no tool loop. We want prose back,
-        // not an agent session.
-        '--mode', 'ask',
-        // headless: never block waiting for the workspace-trust prompt
-        '--trust',
-        ...(this.model ? ['--model', this.model] : []),
-      ],
-      {
-        // An EMPTY dir on purpose. Run from the repo, cursor-agent indexes the
-        // codebase and folds AGENTS.md / .cursor/rules into the context — the
-        // story prompt must be the only thing the model sees.
-        cwd: this.workDir,
-        timeout: 900_000,
-        // stdin MUST be closed. Verified: with an open stdin pipe the CLI
-        // prints the result envelope and then keeps running forever waiting
-        // for EOF — the same trap as `codex exec`.
-        stdin: 'ignore',
-      },
-    );
+    const prompt = `${opts.system}\n\n${opts.prompt}${imageBlock}`;
+
+    let stdout: string;
+    try {
+      ({ stdout } = await execa(
+        this.cliPath,
+        [
+          '-p', prompt,
+          '--output-format', 'json',
+          // read-only Q&A: no edits, no shell, no tool loop. We want prose back,
+          // not an agent session.
+          '--mode', 'ask',
+          // headless: never block waiting for the workspace-trust prompt
+          '--trust',
+          ...(this.model ? ['--model', this.model] : []),
+        ],
+        {
+          // An EMPTY dir on purpose. Run from the repo, cursor-agent indexes the
+          // codebase and folds AGENTS.md / .cursor/rules into the context — the
+          // story prompt must be the only thing the model sees.
+          cwd: this.workDir,
+          timeout: 900_000,
+          // stdin MUST be closed. Verified: with an open stdin pipe the CLI
+          // prints the result envelope and then keeps running forever waiting
+          // for EOF — the same trap as `codex exec`.
+          stdin: 'ignore',
+        },
+      ));
+    } finally {
+      if (imageDir) await rm(imageDir, { recursive: true, force: true });
+    }
 
     const { text, usage } = parseCursorEnvelope(stdout);
     return {

@@ -24,10 +24,11 @@ export function isFatalLlmError(err: unknown): boolean {
 }
 
 /**
- * `model` overrides the provider's configured default for this one call. Only
- * cursor-agent sends it today — it is the provider whose whole point is the
- * model menu — but the override is honoured by all of them so the choice stays
- * a property of the factory rather than a special case in one branch.
+ * `model` overrides the provider's configured default for this one call.
+ * cursor-agent and codex send it from their pickers (a Codex id may carry an
+ * `@effort` suffix, see shared codexModels.ts); the override is honoured by
+ * all of them so the choice stays a property of the factory rather than a
+ * special case in one branch.
  */
 export function getProvider(config: AppConfig, name: Provider, model?: string): LlmProvider {
   switch (name) {
@@ -36,12 +37,7 @@ export function getProvider(config: AppConfig, name: Provider, model?: string): 
     case 'claude-code':
       return new ClaudeCodeProvider(config.claudeCliPath, model || config.claudeModel);
     case 'codex':
-      return new CodexProvider(
-        config.codexCliPath,
-        config.codexInputCostPerMTok,
-        config.codexOutputCostPerMTok,
-        model || config.codexModel,
-      );
+      return new CodexProvider(config.codexCliPath, model || config.codexModel, config.codexPricePerMTok);
     case 'cursor-agent':
       return new CursorAgentProvider(
         config.cursorCliPath,
@@ -93,5 +89,5 @@ export function buildRepairInstruction(err: unknown): string {
   return `Your previous response was not valid JSON matching the schema (${reason}). Respond again with ONLY the corrected JSON object.`;
 }
 
-export { extractJson, parseWithSchema, LlmValidationError } from './provider.js';
+export { extractJson, parseWithSchema, LlmValidationError, UnsupportedImagesError } from './provider.js';
 export type { LlmProvider, LlmResult, GenerateJsonOptions } from './provider.js';

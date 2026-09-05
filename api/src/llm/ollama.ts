@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { GenerateJsonOptions, LlmProvider, LlmResult } from './provider.js';
-import { parseWithSchema } from './provider.js';
+import { parseWithSchema, UnsupportedImagesError } from './provider.js';
 
 interface OllamaChatResponse {
   message: { content: string };
@@ -26,6 +26,7 @@ export class OllamaProvider implements LlmProvider {
   ) {}
 
   async generateJson<T>(opts: GenerateJsonOptions<T>): Promise<LlmResult<T>> {
+    if (opts.images?.length) throw new UnsupportedImagesError(this.name);
     const res = await fetch(`${this.baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

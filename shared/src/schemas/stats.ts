@@ -7,6 +7,8 @@ export const StatsSchema = z.object({
   avg_cost_usd: z.coerce.number(),
   total_runs: z.number().int(),
   cost_by_provider: z.record(z.string(), z.number()),
+  /** Spend not attributable to a video: research runs and topic suggestions. */
+  research_cost_usd: z.coerce.number().default(0),
 });
 
 export const HealthSchema = z.object({

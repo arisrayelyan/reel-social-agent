@@ -64,7 +64,14 @@ export class NanoBananaClient {
       contents: prompt,
       config: {
         responseModalities: ['IMAGE'],
-        imageConfig: { aspectRatio: '9:16' },
+        imageConfig: {
+          aspectRatio: '9:16',
+          // VERIFIED 3 Sep 2026: gemini-2.5-flash-image ACCEPTS imageSize and
+          // IGNORES it — 1K and 2K both return 768x1344 at identical token
+          // cost. gemini-3.1-flash-image and gemini-3-pro-image honour it and
+          // return 1536x2752. Only send it where it does something.
+          ...(this.config.geminiImageSize ? { imageSize: this.config.geminiImageSize } : {}),
+        },
       },
     });
 

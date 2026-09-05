@@ -1,9 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Clapperboard, LayoutDashboard, Settings, Sparkles } from 'lucide-react';
+import { Clapperboard, LayoutDashboard, Settings, Sparkles, Telescope } from 'lucide-react';
 import { useVideos } from '@/hooks/useVideos';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+  { to: '/research', label: 'Research', icon: Telescope, exact: false },
   { to: '/generate', label: 'Generate', icon: Sparkles, exact: false },
   { to: '/settings', label: 'Settings', icon: Settings, exact: false },
 ];

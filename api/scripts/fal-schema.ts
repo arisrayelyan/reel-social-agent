@@ -63,6 +63,21 @@ function typeOf(schema: JsonSchema): string {
   return bounds.length > 0 ? `${raw} (${bounds.join(', ')})` : raw;
 }
 
+/**
+ * Duration is an integer with minimum/maximum on some families and a STRING
+ * enum on others (Kling: "3".."15", Seedance: "auto","4".."15"), so the bound
+ * has to be read from whichever shape the endpoint declares.
+ */
+function durationBound(schema: JsonSchema | undefined, which: 'min' | 'max'): number | null {
+  if (!schema) return null;
+  if (schema.enum) {
+    const numbers = schema.enum.map(Number).filter((n) => Number.isFinite(n));
+    if (numbers.length === 0) return null;
+    return which === 'min' ? Math.min(...numbers) : Math.max(...numbers);
+  }
+  return (which === 'min' ? schema.minimum : schema.maximum) ?? null;
+}
+
 const url = `https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=${encodeURIComponent(endpointId)}`;
 const res = await fetch(url);
 if (!res.ok) {
@@ -111,9 +126,20 @@ const caps = {
   supportsSeed: 'seed' in props,
   supportsEndImage: 'end_image_url' in props || 'tail_image_url' in props,
   hasNegativePrompt: 'negative_prompt' in props,
-  rewritesPrompt: 'prompt_expansion_mode' in props,
+  // three different families rewrite the prompt under three different field
+  // names, and hailuo-2.3 reported "no rewrite" while prompt_optimizer
+  // defaulted to true. Any of them means `expanded_prompt` is what the model
+  // actually generated from, and our motion rules are only advisory.
+  rewritesPrompt:
+    'prompt_expansion_mode' in props || 'prompt_optimizer' in props || 'auto_fix' in props,
+  generatesAudio: 'generate_audio' in props,
+  supportsCfgScale: 'cfg_scale' in props,
+  // Kling calls the first frame start_image_url; sending image_url is a 422
+  imageField: 'start_image_url' in props ? 'start_image_url' : 'image_url',
   resolutions: deref(doc, props.resolution)?.enum ?? [],
-  maxDurationSeconds: deref(doc, props.duration)?.maximum ?? null,
+  // the real floor on shot length — h3-max is 5s, Kling 3s, Grok 1s
+  minDurationSeconds: durationBound(deref(doc, props.duration), 'min'),
+  maxDurationSeconds: durationBound(deref(doc, props.duration), 'max'),
 };
 console.log('\nCAPABILITIES');
 for (const [key, value] of Object.entries(caps)) {
@@ -133,7 +159,18 @@ console.log(`  '${endpointId}': {
     supportsSeed: ${caps.supportsSeed},
     supportsEndImage: ${caps.supportsEndImage},
     resolutions: ${JSON.stringify(caps.resolutions.length ? caps.resolutions : ['768P'])},
+    supportsResolution: ${caps.resolutions.length > 0},
+    minDurationSeconds: ${caps.minDurationSeconds ?? 5},
     maxDurationSeconds: ${caps.maxDurationSeconds ?? 15},
+    imageField: '${caps.imageField}',
+    hasNegativePrompt: ${caps.hasNegativePrompt},
+    rewritesPrompt: ${caps.rewritesPrompt},
+    audioField: ${caps.generatesAudio ? "'generate_audio'" : 'null'},
+    supportsCfgScale: ${caps.supportsCfgScale},
   },`);
+if (caps.generatesAudio) {
+  console.log('  NOTE: generate_audio defaults TRUE here. merge strips clip audio,');
+  console.log('        and on Kling that default is a 50% surcharge. Send false.');
+}
 console.log(`\nPRICING is not in the openapi document. Confirm $/s here before adopting:`);
 console.log(`  ${doc['x-fal-metadata']?.playgroundUrl ?? `https://fal.ai/models/${endpointId}`}\n`);

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { PIPELINE_STEPS, PROVIDERS, VIDEO_STATUSES } from '../constants.js';
 import { StorySchema } from './story.js';
 import { StoryFindingsSchema } from './storyFindings.js';
+import { SourceImageSchema } from './sourceImage.js';
 
 export const VideoStatusSchema = z.enum(VIDEO_STATUSES);
 export const PipelineStepSchema = z.enum(PIPELINE_STEPS);
@@ -42,6 +43,12 @@ export const VideoSchema = z.object({
   source_url: z.string().nullable(),
   /** Scraped markdown the story is based on (kept for change requests). */
   source_material: z.string().nullable(),
+  /**
+   * Photographs found in the source page's main content, downloaded and
+   * described by the story provider. The descriptions ride into the story
+   * prompt as PHOTO NOTES; the files themselves never reach Gemini.
+   */
+  source_images: z.array(SourceImageSchema).default([]),
   error: z.string().nullable(),
   total_cost_usd: z.coerce.number(),
   created_at: z.coerce.string(),
@@ -58,12 +65,15 @@ export const GenerateStoryBodySchema = z.object({
   change_request: z.string().optional(),
   /** When regenerating an existing video. */
   video_id: z.number().int().positive().optional(),
+  /** Research candidate this story was started from — linked, never required. */
+  candidate_id: z.number().int().positive().optional(),
 });
 
 export const GenerateFromUrlBodySchema = z.object({
   url: z.url({ protocol: /^https?$/ }),
   provider: ProviderSchema,
   model: ModelOverrideSchema,
+  candidate_id: z.number().int().positive().optional(),
 });
 
 /**

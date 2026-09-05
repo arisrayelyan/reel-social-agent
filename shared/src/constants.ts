@@ -29,8 +29,93 @@ export const BEAT_GAP_SECONDS = 0.6;
  */
 export const END_TAIL_SECONDS = 1.2;
 
+/**
+ * Hook image prompt word cap, as a proxy for how many separate things are in
+ * the first frame. The hook has about a third of a second to be read, and an
+ * unreadable frame fails the same way a static one does.
+ *
+ * Re-derived 4 Sep 2026, when the prompt began mandating a five-part PERSON
+ * SPEC. A fully compliant hook now runs ~48 words — shot type, the anomaly,
+ * the person (age and build, garment, tool, what their hands do, which side of
+ * the face is lit), one light source with a direction, one atmosphere or wear
+ * cue. The acceptance fixture's hook is 47. The previous cap of 45 was
+ * calibrated against a prompt with no person spec and would now fail a
+ * perfectly compliant hook.
+ *
+ * PROVISIONAL: the discriminating power is weaker than it was, because a
+ * person spec legitimately spends the words that used to signal extra
+ * subjects. On the pre-person-spec Opus 5 eval the five hooks ran 54-74 words
+ * and the 74-word one named nine distinct objects, so 60 still catches that
+ * shape. Confirm against a fresh eval before trusting it, and remember it is
+ * a warning: the producer decides.
+ */
+export const MAX_HOOK_IMAGE_PROMPT_WORDS = 60;
+
 /** On-screen hook overlay: max words that fit centre-frame at 88px. */
 export const OVERLAY_HOOK_MAX_WORDS = 8;
+
+/**
+ * Cut rate. A beat is the unit of narration and timing; a SHOT is the unit of
+ * picture, and a beat carries several. The first four published reels put one
+ * shot on each beat, which made every shot as long as its narration — measured
+ * 6.5-15.5s on screen, against the 1-3s a viewer is used to. Video 4's entire
+ * 57 seconds contained seven cuts.
+ *
+ * Subdividing the picture layer is free: the extra shots are stills with a
+ * Remotion-free ffmpeg camera move over them, not fal generations. Audio,
+ * cues and overlays are untouched, so `cues[i]` still means `beats[i]`.
+ */
+export const TARGET_SHOT_SECONDS = 5.0;
+/** Below this the eye cannot parse a new frame before it is replaced. */
+export const MIN_SHOT_SECONDS = 1.6;
+export const MAX_SHOTS_PER_BEAT = 6;
+
+/**
+ * One camera move over a still, as start/end zoom plus start/end window
+ * centre (0.5 = centred, 0 = flush to the low edge).
+ *
+ * Zoom never exceeds MAX_SHOT_ZOOM: Gemini returns 768x1344 at its default
+ * `1K` image size and merge already upscales that to 1080x1920, so every
+ * additional factor compounds on an upscale. GEMINI_IMAGE_SIZE=2K is what
+ * buys the headroom this table assumes.
+ */
+export interface CameraMove {
+  readonly id: string;
+  readonly zoomFrom: number;
+  readonly zoomTo: number;
+  readonly fromX: number;
+  readonly fromY: number;
+  readonly toX: number;
+  readonly toY: number;
+}
+
+export const MAX_SHOT_ZOOM = 1.18;
+
+/**
+ * Named for the house motion grammar in craft.ts CAMERA_VERBS, so a shot's
+ * move reads in the activity log the same way a beat's motion_prompt does.
+ *
+ * Six entries, picked with a stride of 5 (coprime with 6) so consecutive
+ * shots inside a beat never share a move and the pattern does not align with
+ * beat boundaries — a repeating move is the drifting-slideshow tell.
+ */
+export const CAMERA_MOVES: readonly CameraMove[] = [
+  { id: 'push_in',   zoomFrom: 1.0,  zoomTo: 1.18, fromX: 0.5,  fromY: 0.5,  toX: 0.5,  toY: 0.5  },
+  { id: 'pull_back', zoomFrom: 1.18, zoomTo: 1.0,  fromX: 0.5,  fromY: 0.5,  toX: 0.5,  toY: 0.5  },
+  { id: 'pan_right', zoomFrom: 1.14, zoomTo: 1.14, fromX: 0.38, fromY: 0.5,  toX: 0.62, toY: 0.5  },
+  { id: 'tilt_down', zoomFrom: 1.14, zoomTo: 1.14, fromX: 0.5,  fromY: 0.36, toX: 0.5,  toY: 0.64 },
+  { id: 'pan_left',  zoomFrom: 1.14, zoomTo: 1.14, fromX: 0.62, fromY: 0.5,  toX: 0.38, toY: 0.5  },
+  { id: 'crane_up',  zoomFrom: 1.04, zoomTo: 1.16, fromX: 0.5,  fromY: 0.62, toX: 0.5,  toY: 0.4  },
+] as const;
+
+/** Stride is coprime with CAMERA_MOVES.length; see the table's comment. */
+export const CAMERA_MOVE_STRIDE = 5;
+
+export function cameraMoveFor(beatIndex: number, shotIndex: number): CameraMove {
+  const n = CAMERA_MOVES.length;
+  const i = ((beatIndex * CAMERA_MOVE_STRIDE + shotIndex) % n + n) % n;
+  return CAMERA_MOVES[i]!;
+}
 
 /** Render target. */
 export const VIDEO = { width: 1080, height: 1920, fps: 30 } as const;
@@ -42,7 +127,7 @@ export const VIDEO = { width: 1080, height: 1920, fps: 30 } as const;
  * Must be byte-identical across every shot of a video: the server injects it,
  * the LLM never writes it (pipeline-learnings §4). Per-story prefixes fill the
  * same skeleton with a capture medium chosen for the era of the EVENT — see
- * CAPTURE_MEDIA in craft.ts. A 2023 story shot on Tri-X is a lie.
+ * CAPTURE_MEDIA in craft.ts. A 2023 story shot on Autochrome is a lie.
  *
  * The overlapping negatives from the doc's §2 text are omitted on purpose:
  * buildImagePrompt already appends IMAGE_PROMPT_SUFFIX, and emitting
@@ -61,7 +146,8 @@ export const DEFAULT_STYLE_PREFIX =
  * literal "AUGUST 14:2024" into a keyframe whose beat prompt said "dated frame".
  */
 export const IMAGE_PROMPT_SUFFIX =
-  'single image, no grid, no text, no labels, no watermark, no date stamp, no timestamp overlay';
+  'single image, full natural colour, no black and white, no monochrome, no sepia, no desaturated look, ' +
+  'no grid, no text, no labels, no watermark, no date stamp, no timestamp overlay';
 
 /**
  * Fixed negative block appended to every motion prompt (pipeline-learnings §5).
@@ -74,11 +160,26 @@ export const IMAGE_PROMPT_SUFFIX =
  */
 export const MOTION_NEGATIVES =
   'No cuts. No one turns to face the camera, no speech, no lip movement. ' +
+  'Full colour throughout: no fade to black, no fade to white, no black or white frames, no desaturation. ' +
   'Use only this image, ignore all other references.';
 
-/** Extra line for locked-camera beats (2–3 per video stop the AI-slideshow drift). */
-export const MOTION_LOCKED_CAMERA =
-  'Absolutely no camera movement, tripod locked.';
+/**
+ * The same bans as MOTION_NEGATIVES, in the comma-separated form a real
+ * `negative_prompt` field expects — Kling's own default for that field is
+ * "blur, distort, and low quality", so keyword-ish is the convention there.
+ *
+ * Used ONLY where the endpoint declares the field (see falModels caps). On
+ * h3-max, which has no such field, the prose version stays inside the prompt.
+ * Moving them out matters because the motion prompt has a ~30-word budget
+ * before the family starts dropping instructions, and on an endpoint that
+ * expands the prompt the negatives get amplified while the motion does not.
+ *
+ * UNVERIFIED against a real generation — no endpoint using it is live yet.
+ */
+export const MOTION_NEGATIVES_KEYWORDS =
+  'cuts, scene changes, subject turning to face the camera, speech, lip movement, ' +
+  'black and white, monochrome, desaturation, fade to black, fade to white, ' +
+  'on-screen text, watermark, blur, distortion, low quality';
 
 export const VIDEO_STATUSES = [
   'draft',
@@ -110,6 +211,30 @@ export const BEAT_ROLES = [
   'kicker',
 ] as const;
 
+/**
+ * Music genre vocabulary for the post-time sound suggestion. Music is added
+ * inside TikTok when posting (the render stays silent under narration); the
+ * story model picks one of these for the story's emotional register and the
+ * producer reads it next to the caption. `as const` so the story schema, the
+ * prompt and the UI share one list.
+ */
+export const MUSIC_GENRES = [
+  'horror',
+  'dark ambient',
+  'tension',
+  'suspense thriller',
+  'melancholic piano',
+  'cinematic orchestral',
+  'documentary ambient',
+  'industrial',
+  'phonk',
+  'lo-fi',
+  'synthwave',
+  'folk acoustic',
+  'triumphant',
+] as const;
+export type MusicGenre = (typeof MUSIC_GENRES)[number];
+
 export const ASSET_KINDS = [
   'keyframe',
   /** Kicker end frame, so the reel's last frame is deterministic and loopable. */
@@ -136,3 +261,36 @@ export const LOOP_END_FRAME_EDIT_PROMPT =
   'no watermark.';
 
 export const PROVIDERS = ['ollama', 'claude-code', 'codex', 'cursor-agent'] as const;
+
+/**
+ * The story-research rubric. Each axis is self-scored 1-5 by the research
+ * model and weighted here; the server computes the total, never the model.
+ * Weights follow docs/retention-postmortem-and-change-plan.md: topic supply
+ * was never the failure, execution feasibility was, so what a camera can
+ * show weighs most. `teach` is the one line the prompt uses to define a 5.
+ */
+export const RESEARCH_SCORE_AXES = [
+  { key: 'visual', label: 'Visual', weight: 3, teach: 'the event itself is visible at scale and IN PROGRESS — water, fire, sky, ice, collapse, machines, crowds — and the first frame can hold ONE legible anomaly a viewer reads in a third of a second' },
+  { key: 'hook', label: 'Hook', weight: 2, teach: 'a twenty-year-old with zero context feels the anomaly in the first four words, without background' },
+  { key: 'turn', label: 'Turn', weight: 2, teach: 'the obvious explanation collapses on ONE documented fact, the real mechanism can be stated literally in one breath, and a verified kicker exists' },
+  { key: 'verifiable', label: 'Verifiable', weight: 2, teach: 'two reliable sources support the central claim and nothing load-bearing needs "mysteriously", "some say" or "experts believe"' },
+  { key: 'people', label: 'People', weight: 1, teach: 'people who were there can be shown at work, anonymous and alive — no bodies, no named face, no children in danger' },
+  { key: 'novelty', label: 'Novelty', weight: 1, teach: 'not a TikTok staple already told a thousand times; the audience has not seen this one' },
+] as const;
+export type ResearchScoreAxis = (typeof RESEARCH_SCORE_AXES)[number]['key'];
+
+/**
+ * Why the producer rejected a candidate. Persisted as a plain string (rows
+ * outlive renames, like finding rule ids); `teach` is what the next research
+ * prompt tells the model the rejection means.
+ */
+export const DISLIKE_REASONS = [
+  { id: 'too_well_known', label: 'Too well known', teach: 'the audience has already seen this story everywhere' },
+  { id: 'not_visual', label: 'Not visual', teach: 'the event has no moment a camera would have caught in progress' },
+  { id: 'not_verifiable', label: 'Not verifiable', teach: 'the central claim rests on hearsay or a single shaky source' },
+  { id: 'policy_risk', label: 'Policy risk', teach: 'it cannot be shown without bodies, a real named face, children in danger or a living public figure' },
+  { id: 'weak_hook', label: 'Weak hook', teach: 'the anomaly needs background before it lands' },
+  { id: 'wrong_era_or_region', label: 'Wrong era or region', teach: 'off the brief for time or place' },
+  { id: 'other', label: 'Other', teach: 'see the producer note' },
+] as const;
+export type DislikeReason = (typeof DISLIKE_REASONS)[number]['id'];

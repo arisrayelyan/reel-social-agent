@@ -13,6 +13,7 @@
     "prompt:critique": "cd api && pnpm exec tsx --env-file=.env scripts/prompt-critique.mts",
     "prompt:eval": "cd api && RUN_EVAL=1 pnpm exec vitest run tests/storyEval.test.ts",
     "prompt:rescore": "cd api && pnpm exec tsx scripts/eval-rescore.mts",
+    "recut": "cd api && pnpm exec tsx --env-file=.env scripts/recut.mts",
     "fal:schema": "cd api && pnpm exec tsx scripts/fal-schema.ts",
     "cursor:models": "cd api && pnpm exec tsx --env-file-if-exists=.env scripts/cursor-models.mts",
     "migrate": "pnpm --filter @reel-agent/api migrate",
