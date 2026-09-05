@@ -51,7 +51,7 @@ function evalProvider(): LlmProvider {
     case 'ollama':
       return new OllamaProvider(process.env.OLLAMA_URL ?? 'http://localhost:11434', MODEL);
     case 'codex':
-      return new CodexProvider(process.env.CODEX_CLI_PATH ?? 'codex', 1.25, 10, MODEL);
+      return new CodexProvider(process.env.CODEX_CLI_PATH ?? 'codex', MODEL);
     case 'claude-code':
       return new ClaudeCodeProvider(process.env.CLAUDE_CLI_PATH ?? 'claude', MODEL);
     case 'cursor-agent':

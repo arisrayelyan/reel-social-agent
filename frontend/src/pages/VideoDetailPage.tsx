@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   CURSOR_MODELS,
+  DEFAULT_CODEX_MODEL,
   DEFAULT_CURSOR_MODEL,
   PROVIDERS,
+  isKnownCodexModel,
   type Asset,
   type Provider,
 } from '@reel-agent/shared';
@@ -14,6 +16,8 @@ import { useVideoMutations } from '@/hooks/useVideoMutations';
 import { StoryFindings } from '@/components/StoryFindings';
 import { RenderReview } from '@/components/RenderReview';
 import { CursorModelSelect } from '@/components/CursorModelSelect';
+import { CodexModelSelect } from '@/components/CodexModelSelect';
+import { pickedModelFor } from '@/components/ProviderPicker';
 import { PublishKit } from '@/components/PublishKit';
 import { SourcePhotos } from '@/components/SourcePhotos';
 import { Button, Card, Pill, PipelineStrip, SectionLabel, StatusPill } from '@/components/design';
@@ -43,13 +47,19 @@ export function VideoDetailPage() {
   const regenProvider =
     pickedProvider ??
     (PROVIDERS.find((p) => p === lastScriptRun?.provider) ?? 'codex');
+  // a run may name a model since retired (or, for Codex, the CLI reports the
+  // bare model without its effort) — fall back rather than handing the
+  // <select> a value none of its options carry
+  const lastModel = lastScriptRun?.model ?? '';
   const regenModel =
     pickedModel ??
-    // a run may name a model Cursor has since retired — fall back rather than
-    // handing the <select> a value none of its options carry
-    (CURSOR_MODELS.some((m) => m.id === lastScriptRun?.model)
-      ? (lastScriptRun!.model as string)
-      : DEFAULT_CURSOR_MODEL);
+    (regenProvider === 'codex'
+      ? isKnownCodexModel(lastModel)
+        ? lastModel
+        : DEFAULT_CODEX_MODEL
+      : CURSOR_MODELS.some((m) => m.id === lastModel)
+        ? lastModel
+        : DEFAULT_CURSOR_MODEL);
 
   const byBeat = (kind: Asset['kind'], beatIndex: number) =>
     video.assets.filter((a) => a.kind === kind && a.beat_index === beatIndex);
@@ -213,7 +223,11 @@ export function VideoDetailPage() {
             <select
               aria-label="Regenerate with"
               value={regenProvider}
-              onChange={(e) => setPickedProvider(e.target.value as Provider)}
+              onChange={(e) => {
+                setPickedProvider(e.target.value as Provider);
+                // a cursor id is not a codex id: re-derive from the last run
+                setPickedModel(null);
+              }}
             >
               <option value="ollama">Ollama · qwen3.6</option>
               <option value="claude-code">Claude Code</option>
@@ -227,6 +241,13 @@ export function VideoDetailPage() {
                 style={{ flex: '0 1 260px', minWidth: 0 }}
               />
             )}
+            {regenProvider === 'codex' && (
+              <CodexModelSelect
+                value={regenModel}
+                onChange={setPickedModel}
+                style={{ flex: '0 1 320px', minWidth: 0 }}
+              />
+            )}
             <Button
               variant="ghost"
               disabled={!changeRequest.trim()}
@@ -236,7 +257,7 @@ export function VideoDetailPage() {
                   {
                     video_id: video.id,
                     provider: regenProvider,
-                    model: regenProvider === 'cursor-agent' ? regenModel : undefined,
+                    model: pickedModelFor(regenProvider, { cursorModel: regenModel, codexModel: regenModel }),
                     change_request: changeRequest,
                   },
                   { onSuccess: () => setChangeRequest('') },

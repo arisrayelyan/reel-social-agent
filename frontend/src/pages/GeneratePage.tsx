@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { DEFAULT_CURSOR_MODEL, type Provider, type TopicIdea } from '@reel-agent/shared';
+import { DEFAULT_CODEX_MODEL, DEFAULT_CURSOR_MODEL, type Provider, type TopicIdea } from '@reel-agent/shared';
 import { Button, Card, Pill, SectionLabel } from '@/components/design';
-import { ProviderPicker, providerLabel } from '@/components/ProviderPicker';
+import { ProviderPicker, pickedModelFor, providerLabel } from '@/components/ProviderPicker';
 import { useVideoMutations } from '@/hooks/useVideoMutations';
 
 type Mode = 'topic' | 'url';
@@ -25,6 +25,7 @@ export function GeneratePage() {
   const { generateStory, generateFromUrl, suggestTopics } = useVideoMutations();
   const [provider, setProvider] = useState<Provider>('codex');
   const [cursorModel, setCursorModel] = useState(DEFAULT_CURSOR_MODEL);
+  const [codexModel, setCodexModel] = useState(DEFAULT_CODEX_MODEL);
   const [mode, setMode] = useState<Mode>('topic');
   const [topic, setTopic] = useState('');
   const [url, setUrl] = useState('');
@@ -35,8 +36,8 @@ export function GeneratePage() {
 
   const urlError = validateUrl(url);
   const starting = generateStory.isPending || generateFromUrl.isPending;
-  // only cursor-agent takes a per-request model; the others are fixed by env
-  const model = provider === 'cursor-agent' ? cursorModel : undefined;
+  // cursor-agent and codex take a per-request model; the others are fixed by env
+  const model = pickedModelFor(provider, { cursorModel, codexModel });
 
   const generate = (chosenTopic: string) => {
     if (!chosenTopic.trim() || starting) return;
@@ -82,8 +83,10 @@ export function GeneratePage() {
       <ProviderPicker
         provider={provider}
         cursorModel={cursorModel}
+        codexModel={codexModel}
         onProviderChange={setProvider}
         onCursorModelChange={setCursorModel}
+        onCodexModelChange={setCodexModel}
       />
 
       <SectionLabel>Source</SectionLabel>

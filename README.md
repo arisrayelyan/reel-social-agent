@@ -91,6 +91,7 @@ Open http://localhost:4040. The Settings page shows live health for every servic
 | `OLLAMA_URL` / `OLLAMA_MODEL` / `OLLAMA_EMBED_MODEL` | free local LLM + embeddings | `http://localhost:11434`, `qwen3.6:latest`, `qwen3-embedding:0.6b` |
 | `CLAUDE_CLI_PATH` / `CODEX_CLI_PATH` / `CURSOR_CLI_PATH` | CLI story generators | `claude` / `codex` / `cursor-agent` (uses your existing logins) |
 | `CURSOR_MODEL` / `CURSOR_PRICE_PER_MTOK_MAP` | fallback Cursor model + cost estimate overrides | `claude-opus-5-thinking-high`; the Generate page picks model + effort per request |
+| `CODEX_MODEL` / `CODEX_PRICE_PER_MTOK_MAP` | fallback Codex model (`<model>` or `<model>@<effort>`) + cost estimate overrides | `gpt-6-astra@high`; the Generate page picks model + reasoning effort per request |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | render-ready notifications | see below |
 | `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` | TikTok inbox upload (parked, optional) | https://developers.tiktok.com/apps — needs Login Kit + Content Posting (`video.upload` scope) |
 | `STORAGE_DIR` / `PROMPTS_DIR` | media + prompt template folders | defaults `../storage`, `../prompts` |

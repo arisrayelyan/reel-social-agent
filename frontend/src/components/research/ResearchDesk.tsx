@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import {
   CURSOR_MODELS,
+  DEFAULT_CODEX_MODEL,
   DEFAULT_CURSOR_MODEL,
   DEFAULT_RESEARCH_MODEL,
   RESEARCH_COUNTS,
   type Provider,
 } from '@reel-agent/shared';
 import { Button, Card, SectionLabel } from '@/components/design';
-import { ProviderPicker } from '@/components/ProviderPicker';
+import { ProviderPicker, pickedModelFor } from '@/components/ProviderPicker';
 import { useResearchMutations } from '@/hooks/useResearch';
 
 /**
@@ -21,10 +22,11 @@ export function ResearchDesk({ onStarted }: { onStarted: (runId: number) => void
   const [cursorModel, setCursorModel] = useState(
     CURSOR_MODELS.some((m) => m.id === DEFAULT_RESEARCH_MODEL) ? DEFAULT_RESEARCH_MODEL : DEFAULT_CURSOR_MODEL,
   );
+  const [codexModel, setCodexModel] = useState(DEFAULT_CODEX_MODEL);
   const [brief, setBrief] = useState('');
   const [count, setCount] = useState<(typeof RESEARCH_COUNTS)[number]>(8);
   const [useSources, setUseSources] = useState(false);
-  const model = provider === 'cursor-agent' ? cursorModel : undefined;
+  const model = pickedModelFor(provider, { cursorModel, codexModel });
 
   const start = () =>
     startResearch.mutate(
@@ -37,8 +39,10 @@ export function ResearchDesk({ onStarted }: { onStarted: (runId: number) => void
       <ProviderPicker
         provider={provider}
         cursorModel={cursorModel}
+        codexModel={codexModel}
         onProviderChange={setProvider}
         onCursorModelChange={setCursorModel}
+        onCodexModelChange={setCodexModel}
         label="Research model"
       />
       <SectionLabel>Brief</SectionLabel>

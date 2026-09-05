@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import type { StoryCandidate } from '@reel-agent/shared';
+import { DEFAULT_CODEX_MODEL, type StoryCandidate } from '@reel-agent/shared';
 import { api } from '@/lib/api';
 import { ResearchRunPage } from '@/pages/ResearchRunPage';
 
@@ -174,7 +174,7 @@ describe('research dossier', () => {
     expect(api.post).toHaveBeenCalledWith('/api/generate/from-url', {
       url: 'https://en.wikipedia.org/wiki/1975_Banqiao_Dam_failure',
       provider: 'codex',
-      model: undefined,
+      model: DEFAULT_CODEX_MODEL,
       candidate_id: 10,
     });
   });
@@ -189,7 +189,7 @@ describe('research dossier', () => {
     expect(api.post).toHaveBeenCalledWith('/api/generate/story', {
       topic: 'A ledger nobody read',
       provider: 'codex',
-      model: undefined,
+      model: DEFAULT_CODEX_MODEL,
       candidate_id: 11,
     });
   });

@@ -1,6 +1,7 @@
 export * from './constants.js';
 export * from './cursorModelCatalog.js';
 export * from './cursorModels.js';
+export * from './codexModels.js';
 export * from './schemas/story.js';
 export * from './schemas/storyFindings.js';
 export * from './schemas/video.js';

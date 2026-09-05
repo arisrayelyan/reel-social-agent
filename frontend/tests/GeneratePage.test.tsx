@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { CURSOR_BASE_MODELS, DEFAULT_CURSOR_MODEL } from '@reel-agent/shared';
+import { CODEX_BASE_MODELS, CURSOR_BASE_MODELS, DEFAULT_CODEX_MODEL, DEFAULT_CURSOR_MODEL } from '@reel-agent/shared';
 import { api } from '@/lib/api';
 import { GeneratePage } from '@/pages/GeneratePage';
 
@@ -72,6 +72,7 @@ describe('GeneratePage', () => {
     expect(api.post).toHaveBeenCalledWith('/api/generate/from-url', {
       url: 'https://example.com/article',
       provider: 'codex',
+      model: DEFAULT_CODEX_MODEL,
     });
   });
 
@@ -109,6 +110,7 @@ describe('GeneratePage', () => {
     expect(api.post).toHaveBeenLastCalledWith('/api/generate/story', {
       topic: 'The lighthouse that vanished',
       provider: 'codex',
+      model: DEFAULT_CODEX_MODEL,
     });
   });
   it('reveals the Cursor model picker only when Cursor Agent is selected', () => {
@@ -206,5 +208,40 @@ describe('GeneratePage', () => {
     const body = vi.mocked(api.post).mock.calls[0]![1] as { provider: string; model?: string };
     expect(body).toMatchObject({ provider: 'claude-code' });
     expect(body.model).toBeUndefined();
+  });
+
+  it('shows the Codex model and effort pickers for the default Codex provider, and hides them for Claude Code', () => {
+    renderPage();
+    const select = screen.getByLabelText('Codex model');
+    expect(select.querySelectorAll('option')).toHaveLength(CODEX_BASE_MODELS.length);
+    expect(screen.getByLabelText('Effort')).toBeInTheDocument();
+    expect(screen.getByText(DEFAULT_CODEX_MODEL)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Claude Code'));
+    expect(screen.queryByLabelText('Codex model')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Effort')).not.toBeInTheDocument();
+  });
+
+  it('sends the picked Codex model with its effort as one <model>@<effort> id', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { video: { id: 11 } } });
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Codex model'), { target: { value: 'gpt-5.6-terra' } });
+    fireEvent.change(screen.getByLabelText('Effort'), { target: { value: 'medium' } });
+    expect(screen.getByText('gpt-5.6-terra@medium')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/A true story/), { target: { value: 'A dam that failed' } });
+    fireEvent.click(screen.getByText('Generate story'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/videos/11'));
+    expect(api.post).toHaveBeenCalledWith('/api/generate/story', {
+      topic: 'A dam that failed',
+      provider: 'codex',
+      model: 'gpt-5.6-terra@medium',
+    });
+  });
+
+  it('"Default" effort sends the bare model id so the CLI keeps its own effort', () => {
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Effort'), { target: { value: '' } });
+    expect(screen.getByText('gpt-6-astra')).toBeInTheDocument();
   });
 });

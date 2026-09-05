@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { DEFAULT_CURSOR_MODEL, type Provider, type StoryCandidate } from '@reel-agent/shared';
+import { DEFAULT_CODEX_MODEL, DEFAULT_CURSOR_MODEL, type Provider, type StoryCandidate } from '@reel-agent/shared';
 import { Button, Card, Pill, SectionLabel } from '@/components/design';
-import { ProviderPicker } from '@/components/ProviderPicker';
+import { ProviderPicker, pickedModelFor } from '@/components/ProviderPicker';
 import { CandidateTable } from '@/components/research/CandidateTable';
 import { useResearchMutations, useResearchRun } from '@/hooks/useResearch';
 import { useVideoMutations } from '@/hooks/useVideoMutations';
@@ -21,12 +21,13 @@ export function ResearchRunPage() {
   // stories are worth a better model than research; default to the Generate page's choice
   const [provider, setProvider] = useState<Provider>('codex');
   const [cursorModel, setCursorModel] = useState(DEFAULT_CURSOR_MODEL);
+  const [codexModel, setCodexModel] = useState(DEFAULT_CODEX_MODEL);
   const [generatingId, setGeneratingId] = useState<number | null>(null);
 
   if (isLoading) return <Card>Loading…</Card>;
   if (!run) return <Card>Research run not found.</Card>;
 
-  const model = provider === 'cursor-agent' ? cursorModel : undefined;
+  const model = pickedModelFor(provider, { cursorModel, codexModel });
   const generate = (c: StoryCandidate) => {
     setGeneratingId(c.id);
     const onSuccess = (data: { video: { id: number } }) => navigate(`/videos/${data.video.id}`);
@@ -90,8 +91,10 @@ export function ResearchRunPage() {
           <ProviderPicker
             provider={provider}
             cursorModel={cursorModel}
+            codexModel={codexModel}
             onProviderChange={setProvider}
             onCursorModelChange={setCursorModel}
+            onCodexModelChange={setCodexModel}
             label="Generate stories with"
           />
           <SectionLabel>{run.candidates.length} findings, best first</SectionLabel>

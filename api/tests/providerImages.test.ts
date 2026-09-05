@@ -33,7 +33,7 @@ describe('image attachments per CLI provider', () => {
     execa.mockResolvedValue({
       stdout: '{"type":"item.completed","item":{"type":"agent_message","text":"{\\"ok\\":true}"}}',
     });
-    await new CodexProvider('codex', 1, 1, 'm').generateJson({ ...base, images: [imageA, '/x/b.png'] });
+    await new CodexProvider('codex', 'm').generateJson({ ...base, images: [imageA, '/x/b.png'] });
     const args = execa.mock.calls[0]![1] as string[];
     expect(args).toEqual(expect.arrayContaining(['-i', imageA, '-i', '/x/b.png']));
     expect(args.indexOf('-i')).toBeLessThan(args.indexOf('sys\n\nuser'));
@@ -43,7 +43,7 @@ describe('image attachments per CLI provider', () => {
     execa.mockResolvedValue({
       stdout: '{"type":"item.completed","item":{"type":"agent_message","text":"{\\"ok\\":true}"}}',
     });
-    await new CodexProvider('codex', 1, 1, 'm').generateJson(base);
+    await new CodexProvider('codex', 'm').generateJson(base);
     expect(execa.mock.calls[0]![1]).not.toContain('-i');
   });
 

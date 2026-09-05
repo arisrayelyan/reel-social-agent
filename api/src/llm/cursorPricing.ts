@@ -3,20 +3,19 @@
  *
  * `cursor-agent --output-format json` reports exact token counts but no dollar
  * figure — Cursor only exposes spend through its billing endpoints. So cost is
- * estimated here, and it has to be estimated per model family: unlike codex,
- * where one flat pair of rates covers the one model in play, Cursor resells
+ * estimated here, and it has to be estimated per model family: Cursor resells
  * ~220 models spanning $0.3/M to $50/M output. A single rate would be twenty
  * times wrong at the edges.
  *
  * List prices from https://cursor.com/docs/models-and-pricing, read 2 Sep 2026,
  * USD per 1M tokens, base tier. Known source of under-reporting: `-fast`
  * (priority) variants bill roughly 2-3x these rates. Override any family with
- * CURSOR_PRICE_PER_MTOK_MAP.
+ * CURSOR_PRICE_PER_MTOK_MAP. Map syntax and prefix lookup live in pricing.ts,
+ * shared with codexPricing.ts.
  */
-export interface CursorPrice {
-  inputPerMTok: number;
-  outputPerMTok: number;
-}
+import { parsePriceMap, priceFor, type TokenPrice } from './pricing.js';
+
+export type CursorPrice = TokenPrice;
 
 /** Model-id prefix → price. Longest matching prefix wins. */
 export const CURSOR_FAMILY_PRICES: Record<string, CursorPrice> = {
@@ -66,47 +65,16 @@ export interface CursorTokenUsage {
 
 /**
  * Parses CURSOR_PRICE_PER_MTOK_MAP: "prefix:input/output,prefix:input/output",
- * e.g. "claude-opus:5/25,gemini:0.3/2.5".
- *
- * Flat rather than JSON for the same reason as FAL_COST_PER_SECOND_USD_MAP
- * (see clients/falModels.ts): a dotenv value containing {"..."} invites
- * quoting mistakes and a '#' anywhere truncates the line. Malformed entries
- * are ignored, never fatal.
+ * e.g. "claude-opus:5/25,gemini:0.3/2.5". Syntax and tolerance in pricing.ts.
  */
-export function parseCursorPriceMap(raw: string | undefined): Record<string, CursorPrice> {
-  const map: Record<string, CursorPrice> = {};
-  for (const entry of (raw ?? '').split(',')) {
-    const trimmed = entry.trim();
-    if (!trimmed) continue;
-    const split = trimmed.lastIndexOf(':');
-    if (split <= 0) continue;
-    const prefix = trimmed.slice(0, split).trim();
-    const rates = trimmed.slice(split + 1).split('/');
-    if (!prefix || rates.length !== 2) continue;
-    const input = Number(rates[0]!.trim());
-    const output = Number(rates[1]!.trim());
-    if (!Number.isFinite(input) || !Number.isFinite(output)) continue;
-    if (input < 0 || output < 0) continue;
-    map[prefix] = { inputPerMTok: input, outputPerMTok: output };
-  }
-  return map;
-}
+export const parseCursorPriceMap = parsePriceMap;
 
 /** env overrides → built-in family table → default. Longest prefix wins in both. */
 export function cursorPriceFor(
   model: string,
   overrides: Record<string, CursorPrice> = {},
 ): CursorPrice {
-  const longestMatch = (table: Record<string, CursorPrice>): CursorPrice | null => {
-    let best: string | null = null;
-    for (const prefix of Object.keys(table)) {
-      if (model.startsWith(prefix) && (best === null || prefix.length > best.length)) {
-        best = prefix;
-      }
-    }
-    return best === null ? null : table[best]!;
-  };
-  return longestMatch(overrides) ?? longestMatch(CURSOR_FAMILY_PRICES) ?? CURSOR_DEFAULT_PRICE;
+  return priceFor(model, CURSOR_FAMILY_PRICES, overrides, CURSOR_DEFAULT_PRICE);
 }
 
 /** Estimated USD for one call, rounded to the 4dp the DB column stores. */

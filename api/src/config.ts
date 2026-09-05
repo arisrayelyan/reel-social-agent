@@ -1,8 +1,10 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_CURSOR_MODEL } from '@reel-agent/shared';
+import { DEFAULT_CODEX_MODEL, DEFAULT_CURSOR_MODEL } from '@reel-agent/shared';
 import { parseCostMap } from './clients/falModels.js';
+import { parseCodexPriceMap } from './llm/codexPricing.js';
 import { parseCursorPriceMap, type CursorPrice } from './llm/cursorPricing.js';
+import type { TokenPrice } from './llm/pricing.js';
 
 export interface AppConfig {
   port: number;
@@ -19,9 +21,10 @@ export interface AppConfig {
   claudeCliPath: string;
   claudeModel: string;
   codexCliPath: string;
+  /** Fallback `<model>` or `<model>@<effort>`; the pages override it per request. */
   codexModel: string;
-  codexInputCostPerMTok: number;
-  codexOutputCostPerMTok: number;
+  /** Model-id prefix → $/1M tokens, overriding the built-in table in llm/codexPricing.ts. */
+  codexPricePerMTok: Record<string, TokenPrice>;
   cursorCliPath: string;
   /** Fallback model; the Generate page overrides it per request. */
   cursorModel: string;
@@ -118,9 +121,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     claudeCliPath: env.CLAUDE_CLI_PATH ?? 'claude',
     claudeModel: env.CLAUDE_MODEL ?? 'opus',
     codexCliPath: env.CODEX_CLI_PATH ?? 'codex',
-    codexModel: env.CODEX_MODEL ?? 'gpt-5.6-luna',
-    codexInputCostPerMTok: Number(env.CODEX_INPUT_COST_PER_MTOK ?? 1.25),
-    codexOutputCostPerMTok: Number(env.CODEX_OUTPUT_COST_PER_MTOK ?? 10),
+    codexModel: env.CODEX_MODEL ?? DEFAULT_CODEX_MODEL,
+    codexPricePerMTok: parseCodexPriceMap(env.CODEX_PRICE_PER_MTOK_MAP),
     cursorCliPath: env.CURSOR_CLI_PATH ?? 'cursor-agent',
     cursorModel: env.CURSOR_MODEL ?? DEFAULT_CURSOR_MODEL,
     cursorPricePerMTok: parseCursorPriceMap(env.CURSOR_PRICE_PER_MTOK_MAP),
